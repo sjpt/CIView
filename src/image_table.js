@@ -81,7 +81,8 @@ class MLVImageTable {
 
         this.listeners={
        		"image_clicked":new Map(),
-       		"data_changed":new Map()
+       		"data_changed":new Map(),
+       		"tagging":new Map()
        	};
 
        	this.highlight_colors=null;
@@ -394,11 +395,13 @@ class TaggingDialog{
                 self.app.removeListener("image_clicked",self.listener);
                 self.app.clearHighlights();
                 $(this).dialog('destroy').remove();
+                self.app.listeners.tagging.forEach((func)=>{func(false)});   
             },
             title: "Tagging",
             width:250
         });
         this.init();
+        this.app.listeners.tagging.forEach((func)=>{func(true)});      
         
     }
 

@@ -10,6 +10,7 @@ class WGL2DI{
 		this.object_types=[];
 		this.objects_in_view=0;
 		//html elements
+		this.mode="brush";
 		this.div_container=$("#"+div_id);
 		this.canvas=null;
 		this.label_context;
@@ -21,6 +22,8 @@ class WGL2DI{
 		this.is_filtered={};
 		this.is_hidden={};
 
+		
+
     
     
 		//handlers
@@ -28,7 +31,9 @@ class WGL2DI{
 			object_clicked:{},
 			object_over:{},
 			object_out:{},
-			brush_stopped:{}
+			brush_stopped:{},
+			zoom_stopped:{},
+			panning_stopped:{},
 		};
 
 		//switches
@@ -160,10 +165,34 @@ class WGL2DI{
 
 	}
 
-	remove(){}
+	removeAllObjects(){
+		for(let ob of this.object_types){
+			for (let prop in ob.data){
+				if (prop==="count"){
+					ob.data[prop]=0;
+					continue;
+				}
+				ob.data[prop]=[];
+			}
+			for (let prop in ob.data_in_view){
+				if (prop==="count"){
+					ob.data_in_view[prop]=0;
+					continue;
+				}
+				ob.data_in_view[prop]=[];
+			}
+		}
+
+		this.objects=[];
+		this.keys={};
+		
+	}
 
 
 	_setUpDocument(width,height){
+		if (this.mode==="brush"){
+			this.div_container.css("cursor","crosshair")
+		}
 		if (!height){
 			height=this.div_container.height();
 			width=this.div_container.width();
@@ -235,6 +264,15 @@ class WGL2DI{
     	return [x,y];
 	}
 
+	getRange(){
+		let tl = this._getActualPosition([0,0]);
+		let br = this._getActualPosition([this.width,this.height]);
+		return {
+			x_range:[tl[0],br[0]],
+			y_range:[tl[1],br[1]]
+		};
+	}
+
 	_drawLabels(){
     	var time =Date.now();
     	if (this.objects_in_view>5000){
@@ -258,6 +296,9 @@ class WGL2DI{
 
 	setObjectColor(key,color){
 		var obj = this.objects[this.keys[key]];
+		if (!obj){
+			return;
+		}
 		var obj_type= this.object_types[obj[1]];
 		for (var x=obj[0];x<obj[0]+obj_type.vertices;x++){
 			obj_type.data.color[x][0]=color[0]/255;
@@ -641,7 +682,7 @@ class WGL2DI{
 			}
 			else{
 				//this.is_filtered[key]=true;
-				obj_type.data.opacity[obj[0]]=0.4;
+				obj_type.data.opacity[obj[0]]=0.6;
 			}
 			if (this.is_hidden[key]){
 				obj_type.data.opacity[obj[0]]=0;
@@ -850,7 +891,9 @@ class WGL2DI{
 		let self = this;
 		let div =$("<div>").css({position:"absolute",left:origin[0],
 									top:origin[1],height:"0px",width:"0px",
+									cursor:"move",
 									"background-color":"gray",opacity:0.2})
+								  .attr("class","wgl2d-brush")
 								  .appendTo(this.div_container);
 
 		div.draggable({
@@ -860,7 +903,8 @@ class WGL2DI{
 			stop:function (ev,ui){
 				self._brushingStopped();
 
-			}
+			},
+			containment:"parent"
 
 		}).resizable({
 			handles:"all",
@@ -885,6 +929,10 @@ class WGL2DI{
 
 	_brushingStopped(){
 		this.brush.resizing=false;
+		if (this.brush.div.width()<2){
+			this.clearBrush();
+			return;
+		}
 		let pos = this.brush.div.position();
 		let lt =this._getActualPosition([pos.left,pos.top]);
 		let br = this._getActualPosition([pos.left+this.brush.div.width(),pos.top+this.brush.div.height()]);
@@ -1008,8 +1056,13 @@ class WGL2DI{
 				}         
 			}
 		});
+
+	
 		this.div_container.mouseup(function(evt){
 			//just a click event - inform handlers
+			if (self.mode==="brush"){
+				self.div_container.css("cursor","crosshair");
+			}
 			if (self.brush && self.brush.resizing){
 				self._brushingStopped();
 				return;
@@ -1034,6 +1087,11 @@ class WGL2DI{
 				}
 				//update which objects are now in view
 				else{
+					let ret = self.getRange();
+					for (var i in self.handlers.panning_stopped){
+							self.handlers.panning_stopped[i](ret);
+					}  
+
 					self._drawPickBuffer();
 					self._getObjectsInView();
 					if (self.brush){
@@ -1086,6 +1144,11 @@ class WGL2DI{
 				if (self.brush){
 
 				}
+				let ret = self.getRange();
+				for (let name in self.handlers.zoom_stopped){	
+					self.handlers.zoom_stopped[name](ret);
+				}
+
 				self.refresh(true);
 			}, 350));
 
@@ -1095,11 +1158,21 @@ class WGL2DI{
 				//add right click behaviour
 			}
 			//create brush
-			if (evt.shiftKey && !(self.brush)){
+			if (self.mode==="brush" && !(evt.shiftKey)){
+				let t = $(evt.target)
+				if(t.hasClass("wgl2d-brush") || t.hasClass("ui-resizable-handle")){
+					return;
+				}
+				if (self.brush){
+					self.clearBrush();
+				}
 				let origin =self._getMousePosition(evt);
 				self._setUpBrush(origin);
 				return;
 				
+			}
+			if (evt.shiftKey){
+				self.div_container.css("cursor","move");
 			}
 			//get mouse position and work out if an object was clicked
 			var position =self._getMousePosition(evt);

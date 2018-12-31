@@ -10,9 +10,12 @@ and open the template in the editor.
     <title>dc.js - Filtering Example</title>
     <meta charset="UTF-8">
     	
- <link rel="stylesheet" type="text/css" href="css/jquery-ui.min.css">
-    <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
+ <link rel="stylesheet" type="text/css" href="../../MLVPanel/css/jquery-ui-bootstrap/jquery-ui-1.10.3.custom.css">
+ <!--<link rel="stylesheet" type="text/css" href="../../CIView/bootstrap-4.10/css/bootstrap.min.css">-->
     <link rel="stylesheet" type="text/css" href="css/dc.min.css"/>
+    <link rel="stylesheet" type="text/css" href="css/ciview.css"/>
+     <link rel="stylesheet" type="text/css" href="css/gridstack.css"/>
+  
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css">
 
     	
@@ -34,9 +37,9 @@ and open the template in the editor.
 
 <script type="text/javascript" src="src/vendor/jquery.min.js"></script>
 <script type="text/javascript" src="src/vendor/jquery-ui.min.js"></script>
-<script type="text/javascript" src="src/vendor/bootstrap.min.js"></script>
-<script type="text/javascript" src="src/vendor/jquery.event.drag-2.3.0.js"></script>
-<script type="text/javascript" src="src/vendor/MLVPanel_custom.js"></script>
+
+
+<!--<script type="text/javascript" src="../MLV/lanceotron/dist/MLVPanel_custom.js"></script>-->
 <!--<script type="text/javascript" src="src/vendor/d3.js"></script>-->
 <!--<script type="text/javascript" src="src/vendor/crossfilter.js"></script>-->
 <!--<script type="text/javascript" src="src/vendor/dc.min.js"></script>-->
@@ -49,7 +52,7 @@ import {d3} from "./src/vendor/d3.js";
 import {MLVBarChart,MLVRingChart,MLVScatterPlot} from "./src/graphs.js";
 import {MLVImageTable,MLVImageTableControls} from "./src/image_table.js";
 import {DataView} from "./src/vendor/slick.dataview.js";
-import {FilterPanel} from "./src/graphs.js";
+import {FilterPanel,AddChartDialog} from "./src/graphs.js";
 import {CIView} from "./src/ciview.js";
    
 
@@ -166,7 +169,52 @@ $(function(){
       
       }
 
-     let civ = new CIView(config)
+     let civ = new CIView(config);
+     let a = function(d){
+     	if (d.field11>0.5){
+     		return "Peak";
+     	}
+     	if (d.field12>0.5){
+     		return "Noise";
+     	}
+     	return "Mixed"
+     }
+     civ.filter_panel.addChart("ring_chart",a);
+     //civ.filter_panel.charts['filter-chart-4'].changeFields(["field4","field6"]);
+     let ff = function(d){
+     	return d>1000;
+     };
+    /* let filter = civ.data_view.filters[0];
+     filter.active=true;
+     filter.operand=">";
+     filter.value=1000;
+     civ.data_view.filterData();
+     */
+     let cols=[
+		{field:"field6",name:"Peak Area",datatype:"double"},
+		{field:"field5",name:"Peak Height",datatype:"double"},
+		{field:"field4",name:"Peak Width",datatype:"double"},
+     ];
+
+     new AddChartDialog(cols,function(data){
+     	civ.filter_panel.addChart(data.type,data.param,data.label,"sss",{
+     		x:0,
+     		y:0,
+     		height:3,
+     		width:4
+     	})
+     });
+     let arr = [];
+     for (let i=0;i<30;i++){
+     	arr.push({tags:"peak"})
+     }
+     //civ.filter_panel.addRecords(arr);
+     dc.redrawAll();
+
+
+     
+     
+    
    
    
    
@@ -178,6 +226,8 @@ $(function(){
           panel.update();
         }
       }
+
+      // civ.filter_panel.addCustomFilter("id_filter","id",ff,true);
 
    
      
@@ -194,19 +244,21 @@ $(function(){
      // f.setRange(null,2000);
      // f.setBinNumber(4);
      */
-     civ.addFilter("id",function(id){
+   /*  civ.addFilter("id",function(id){
      	if (id>1000){
      		return false;
      	}
      	return true;
      },"the_filter");
-     civ.removeFilter("the_filter");
+     civ.removeFilter("the_filter");*/
      // f.changeXScale(1000);
 
 
-     let pop = $("<div>").css({"position":"absolute","height":"400px","width":"300px","top":"0px"}).appendTo($("body"));
-     civ.addFilterSet("sdsdsd",[{"name":"g2h2gg",params:"field13",type:"row_chart"}],pop);
-     civ.removeFilterSet("Clustering");
+    
+     //civ.addFilterSet("sdsdsd",[{"name":"g2h2gg",params:"field13",type:"row_chart"}],pop);
+     //civ.removeFilterSet("Clustering",true);
+     //civ.addGraph("Clustering","bar_chart","field6","Added");
+     //civ.changeGraphFields("PCA",["field9","field10"]);
 
    
     

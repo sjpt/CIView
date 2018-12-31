@@ -1,7 +1,7 @@
 import {FilterPanel}  from "./graphs.js";
 import {dc} from "./vendor/dc.js";
 import {MLVImageTable,MLVImageTableControls} from "./image_table.js";
-import {DataView} from "./vendor/slick.dataview.js";
+import {FilterPanelDataView} from "./mlv_table.js";
 
 class CIView{
 
@@ -12,16 +12,14 @@ class CIView{
 
 		this.filters={};
 
-		this.data_view =  new DataView();
+		
 		let div = $("#"+config.table_div);
 		this.control_div=$("<div>").css({width:"100%",height:"26px"}).attr("id","civ-control").appendTo(div);
 		let table_div= $("<div>").css({top:"25px",height:"calc(100% - 26px)"}).attr("id","civ-table").appendTo(div);
-		this.filter_panel = new FilterPanel(config.filter_div,config.data,function(info){
-			self._filterChanged(info);
-			if (self.listener){
-				self.listener(info);
-			}
-		});
+		let grid_div = $("<div>")
+		this.filter_panel = new FilterPanel(config.filter_div,config.data);
+		this.data_view =  new FilterPanelDataView(null,this.filter_panel);
+		this.data_view.addFilter({name:"Peak Width",datatype:"double",field:"field4"});
 		this.image_table =  new MLVImageTable(table_div,this.data_view,config.image_base_url);
 		this.data = config.data;
 
@@ -29,17 +27,20 @@ class CIView{
 
 		
 		for (let item of config.graph_groups){
-			this.filter_panel.addFilterSet(item.name,item.height_weight);
 			for (let graph of item.graphs){
-				this.filter_panel.addChart(item.name,graph.type,graph.params,graph.name);			
-			}
+				this.filter_panel.addChart(graph.type,graph.params,graph.name);	
+			}		
+			
 		}
 		this.filter_panel.refresh();
 		this.data_view.setItems(config.data);
 
 		this.image_table.addListener("data_changed",function(field,data){
 			self.filter_panel.dataChanged(field,true);
-		})
+		});
+		this.data_view.onRowsChanged.subscribe(function (e, args) {
+         	self.image_table.show(1);
+        });
 
 	}
 
@@ -51,9 +52,13 @@ class CIView{
 
 	}
 
+	addGraph(panel_name,type,params,name){
+		this.filter_panel.addChart(panel_name,type,params,name)
+	}
 
-	removeFilterSet(name){
-		this.filter_panel.removeFilterSet(name);
+
+	removeFilterSet(name,empty_only){
+		this.filter_panel.removeFilterSet(name,empty_only);
 	}
 
 
@@ -92,14 +97,26 @@ class CIView{
 
 	}
 
-	_filterChanged(data){
-		this.data_view.setItems(data);
+	_filterChanged(data,filtered_items){
+		this.data_view.addCustomFilter("ids",function(item){
+			if (filtered_items[item.id]){
+				return true;
+			}
+			return false;
+		});
+		this.data_view.filterData();
 		this.image_table.show(1);
 
 	}
 
 	setListener(func){
 		this.listener=func;
+	}
+
+
+	changeGraphFields(graph,new_field){
+		let chart = this.filter_panel.charts[graph];
+		chart.changeFields(new_field);
 	}
 
 

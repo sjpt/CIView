@@ -2,38 +2,44 @@ const path = require('path');
 webpack=require("webpack");
 
 module.exports = {
-  entry: './src/indexes/index.js',
-  output: {
-    path: path.resolve(__dirname,"dist"),
-    filename: 'Graphs.js'
-  },
-  plugins: [
-  new webpack.ProvidePlugin({
-	$: "jquery",
-	jquery: "jquery"/*,
-	d3:path.resolve(__dirname,"./src/vendor/d3.js"),
-      crossfilter:path.resolve(__dirname,"./src/vendor/crossfilter.js"),
-      dc:path.resolve(__dirname,"./src/vendor/dc.min.js")
-*/
-     
 
-  })
-],
+	entry: './src/indexes/all_index.js',
 
+  	output: {
+    		path: path.resolve(__dirname,"dist"),
+    		filename: 'ciview.js'
+  	},
+  	plugins: [
+  		new webpack.ProvidePlugin({
+			$: "jquery",
+			jQuery: "jquery"     
+  		})
+	],
 
-  module:{
-      
-     rules:[
-      {
-        test : /\.js/,
-	
-        include : path.resolve(__dirname, 'src'),
-        exclude: path.resolve(__dirname,'src/vendor'),
-        loader : 'babel-loader',
- 		query: {
-                    presets: ['es2015']
-                 }
-      }
-    ]
-  }
+  	module:{ 
+     		rules:[
+     			{
+        			test : /\.js/,
+        			loader : 'babel-loader',
+ 				query:{
+                    		presets: ['es2015']
+                		}
+      		},
+			{
+				test:/\.css$/,
+          			use:[
+					"style-loader",
+					"css-loader"
+				]
+			},
+			{
+        			test: /\.(png|svg|jpg|gif|eot|ttf|woff|woff2)$/,
+         			loader:'file-loader',
+	    			options:{
+					name:'[name].[ext]',
+					outputPath:'./images/'
+       			}
+     			}
+    		]
+  	}
 };

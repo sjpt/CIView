@@ -72,10 +72,21 @@ import {Slick} from "./slick.grid.js";
     var onPagingInfoChanged = new Slick.Event();
 
     options = $.extend(true, {}, defaults, options);
+    var filters=[];
+    var field_to_filter={};
 
 
     function beginUpdate() {
       suspend = true;
+    }
+
+    function isFilterActive(field){
+        let filter = field_to_filter[field];
+        if (!filter){
+            return false;
+        }
+        return filter.active;
+
     }
 
     function endUpdate() {
@@ -86,6 +97,43 @@ import {Slick} from "./slick.grid.js";
     function setRefreshHints(hints) {
       refreshHints = hints;
     }
+
+    function addFilter(column){
+        let filter ={
+             active:false,
+             field:column.field,
+             datatype:column.datatype,
+             label:column.name,
+             operand:"=",
+             value:""
+
+        }
+        if (column.datatype!=="text"){
+             filter.info={max:Number.MIN_SAFE_INTEGER,min:Number.MAX_SAFE_INTEGER}
+        }
+        else{
+            filter.info={values:{}}
+        }
+        field_to_filter[column.field]=filter;
+        filters.push(filter);
+    }
+
+    function setFilterInfo(field,operand,value){
+        
+        let f= field_to_filter[field];
+        f.active=true;
+        if (operand === "<="){
+                f.operand="between";
+                f.value[1]=value
+        }
+        else{
+            f.operand=operand
+            f.value=value;
+        }
+        
+    }
+
+
 
     function setFilterArgs(args) {
       filterArgs = args;
@@ -100,7 +148,13 @@ import {Slick} from "./slick.grid.js";
           throw new Error("Each data element must implement a unique 'id' property");
         }
         idxById[id] = i;
+      
       }
+     
+      
+         
+      
+      
     }
 
     function ensureIdUniqueness() {
@@ -110,7 +164,31 @@ import {Slick} from "./slick.grid.js";
         if (id === undefined || idxById[id] !== i) {
           throw new Error("Each data element must implement a unique 'id' property");
         }
+          for (let field in field_to_filter){
+            let value = items[i][field];
+            if (value !== undefined){
+                let filter =field_to_filter[field];
+
+                if (filter.datatype==="text"){
+                    filter.info.values[value]=true
+                }
+                else{
+                    if (value > filter.info.max){
+                        filter.info.max=value;
+                    }
+                    if (value< filter.info.min){
+                        filter.info.min=value;
+                    }
+                }
+            }
+        }
+
       }
+          for (let f of filters){
+              if (f.datatype !== "text"){
+                   f.value=[f.info.min,f.info.max];
+              }
+          }
     }
 
     function getItems() {
@@ -1102,7 +1180,11 @@ import {Slick} from "./slick.grid.js";
       // events
       "onRowCountChanged": onRowCountChanged,
       "onRowsChanged": onRowsChanged,
-      "onPagingInfoChanged": onPagingInfoChanged
+      "onPagingInfoChanged": onPagingInfoChanged,
+      "filters":filters,
+      "addFilter":addFilter,
+      "isFilterActive":isFilterActive,
+      "setFilterInfo":setFilterInfo
     });
   }
 

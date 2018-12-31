@@ -427,6 +427,61 @@
     this.init();
   }
 
+
+  function InverseCheckboxEditor(args) {
+    var $select;
+    var defaultValue;
+    var scope = this;
+
+    this.init = function () {
+      $select = $("<INPUT type=checkbox value='true' class='editor-checkbox' hideFocus>");
+      $select.appendTo(args.container);
+      $select.focus();
+    };
+
+    this.destroy = function () {
+      $select.remove();
+    };
+
+    this.focus = function () {
+      $select.focus();
+    };
+
+    this.loadValue = function (item) {
+      defaultValue = !item[args.column.field];
+      if (defaultValue) {
+        $select.prop('checked', true);
+      } else {
+        $select.prop('checked', false);
+      }
+    };
+
+    this.preClick = function () {
+        $select.prop('checked', !$select.prop('checked'));
+    };
+
+    this.serializeValue = function () {
+      return !$select.prop('checked');
+    };
+
+    this.applyValue = function (item, state) {
+      item[args.column.field] = state;
+    };
+
+    this.isValueChanged = function () {
+      return !(this.serializeValue() !== defaultValue);
+    };
+
+    this.validate = function () {
+      return {
+        valid: true,
+        msg: null
+      };
+    };
+
+    this.init();
+  }
+
   function PercentCompleteEditor(args) {
     var $input, $picker;
     var defaultValue;
@@ -651,6 +706,7 @@ let Editors = {
         "Date": DateEditor,
         "YesNoSelect": YesNoSelectEditor,
         "Checkbox": CheckboxEditor,
+        "InverseCheckbox":InverseCheckboxEditor,
         "PercentComplete": PercentCompleteEditor,
         "LongText": LongTextEditor
  }

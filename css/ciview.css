@@ -1,0 +1,66 @@
+*, ::after, ::before {
+    box-sizing: border-box;
+}
+
+.grid-stack-item-content {
+  background: white;
+  color: #2c3e50;
+  right:5px !important;
+  left:5px !important;
+}
+
+
+.chart-label{
+	cursor:move;
+}
+
+
+.max-min-slider .ui-slider{
+	display:inline-block;
+	width:calc(100% - 100px);
+	margin-left:10px;
+	margin-right:10px;
+
+}
+
+.civ-chart-dialog,.add-chart-dialog  label {
+	font-weight:bold;
+	margin-bottom:2px;
+	margin-top:3px;
+}
+
+.civ-chart-dialog input[type=checkbox]{
+	
+    vertical-align: middle;
+	width:18px;
+	height:18px;
+}
+
+.civ-chart-dialog .ui-spinner{
+	width:60px;
+	
+}
+
+/*.add-chart-dialog label {
+	font-weight:bold;
+	margin-bottom:2px;
+	margin-top:3px;
+}
+*/
+
+.add-chart-dialog div{
+	margin-top:5px;
+	margin-bottom:5px;
+	display:flex;
+}
+
+.add-chart-dialog select{
+	margin-right:5px;
+}
+
+
+.max-min-slider input{
+	width: 40px;
+	height:20px;
+	border-radius:6px;
+}
