@@ -1779,12 +1779,12 @@ if (typeof Slick === "undefined") {
         beforeStop: function (e, ui) {
           $(ui.helper).removeClass("slick-header-column-active");
         },
-        stop: function (e) {
+        stop: function (e,ui) {
           if (!getEditorLock().commitCurrentEdit()) {
             $(this).sortable("cancel");
             return;
           }
-
+       
           var reorderedIds = $headers.sortable("toArray");
           var reorderedColumns = [];
           for (var i = 0; i < reorderedIds.length; i++) {
@@ -1795,6 +1795,7 @@ if (typeof Slick === "undefined") {
           trigger(self.onColumnsReordered, {grid: self});
           e.stopPropagation();
           setupColumnResize();
+        
         }
       });
     }

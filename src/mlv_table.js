@@ -41,6 +41,7 @@ class ContextMenu{
 
         })
 
+
     }
 
     setItemFunction(func){
@@ -53,6 +54,27 @@ class ContextMenu{
 
     }
 
+    _addItem(item,parent,data){
+        let self =this;
+          let div=$("<div>");
+            if (item.ghosted){
+              div.css({"color":"lightgray"})
+          }
+
+           div.data("func",item.func)
+            .text(item.text).click(function(e){
+                if (!item.ghosted){
+                    $(this).data("func")(data);
+                    self._removeMenu();
+                }
+
+            }).appendTo(parent);
+          if (item.icon){
+              div.append($("<i>").attr("class",item.icon+" mlv-cm-icon"));
+          }
+         
+    }
+
     show(data,e){
         //build menu
         this._removeMenu();
@@ -60,18 +82,29 @@ class ContextMenu{
         this.menu=$("<ul>").css({position:"absolute",display:"none","z-index":1000}).appendTo($("body"));
         this.items= this.set_item_function(data);
         for (let item of this.items){
-            let li = $("<li>");
-            let div=$("<div>").css("hover","blue")
-            .data("func",item.func)
-            .text(item.text).click(function(e){
-                $(this).data("func")(data);
-                self._removeMenu();
-
-            }).appendTo(li);
-            li.appendTo(this.menu);
+            let li = $("<li>").appendTo(this.menu);
+            if (item.subitems){
+                li.appendTo(this.menu);
+                $("<div>").text(item.text)
+                    //.append("<i class='fa fa-caret-right'></i>")
+                    .appendTo(li);
+                let sub_list=$("<ul>").appendTo(li);
+                for (let subitem of item.subitems){
+                    let s_li=$("<li>").appendTo(sub_list);
+                    this._addItem(subitem,s_li);
+                }
+            }
+            else{
+                this._addItem(item,li,data)
+            }
+          
+          
         }
 
+       
+
         this.menu.css({top:e.clientY+"px",left:e.clientX+"px"}).menu().show();
+         $(".ui-menu-item-wrapper").find("span").attr("class","fa fa-caret-right").css("float","right");
         e.stopImmediatePropagation();
 
     }
@@ -99,10 +132,13 @@ class MLVTable{
         this.data_view=data_view?data_view:new MLVDataView();
         
 
-        this.parseColumns(columns,options);
+        columns=this.parseColumns(columns,options);
       
         this.grid= new SlickGrid("#"+element_id,this.data_view,columns,options);
         //need to show any filter icons
+
+
+       
       
 
 
@@ -129,6 +165,21 @@ class MLVTable{
         this.grid.setSelectionModel(new RowSelectionModel());
         this._setupListeners();
         this.grid.setColumns(this.grid.getColumns());
+         if (this.has_column_groups){
+              this.grid.init();
+            this.setUpGroupPanel();
+            this.updateGroupPanel();
+           this.grid.onColumnsResized.subscribe(function(e, args){
+               self.updateGroupPanel();
+          
+       });
+           this.grid.onColumnsReordered.subscribe(function(e, args){
+               self.updateGroupPanel();
+          
+       });
+
+           
+        }
     }
 
     destroy(){
@@ -163,7 +214,25 @@ class MLVTable{
 
     parseColumns(columns,options){
         let self = this;
+        this.column_groups={};
         for (let column of columns){
+
+            if (column.columnGroup){
+                let gr = this.column_groups[column.columnGroup];
+                if (!gr){
+                    gr = {columns:[]};
+                    this.column_groups[column.columnGroup]=gr;
+                }
+                this.has_column_groups=true;
+                if (column.master_group_column){
+                    gr.master_column=column.field;
+                    gr.expanded=false;
+                }
+                else{
+                    gr.columns.push(column.field)
+                }
+            }
+
             if (column.filterable){
               this.data_view.addFilter(column);
                 if (options.no_hide_filter){
@@ -221,6 +290,9 @@ class MLVTable{
                         return  "<i style ='color:red' class='fas fa-times'></i>";
                     }
 
+                },
+                write_formatter:function(value){
+                    return !value;
                 }
             }
             columns.unshift(is_filtered_column)
@@ -228,9 +300,160 @@ class MLVTable{
             
         }
 
-         //this.grid.setColumns(columns);
+        
+        this.hidden_columns={};
+        let has_hidden_columns=false;
+        for (let column of columns){
+            let cg = this.column_groups[column.columnGroup];
+            if (cg && cg.master_column){
+                if (!column.master_group_column){
+                    this.hidden_columns[column.field]=column
+                }
+
+            }     
+        }
+        let display_columns=[]
+        for (let column of columns){
+            if (!this.hidden_columns[column.field]){
+                display_columns.push(column);
+            }
+        }
+
         
 
+
+
+
+        if (this.has_column_groups){
+              options.createPreHeaderPanel= true;
+              options.showPreHeaderPanel = true,
+              options.preHeaderPanelHeight =23;     
+        }
+
+        return display_columns;
+ 
+
+    }
+
+    expandCollapseGroup(group_name){
+        let group = this.column_groups[group_name];
+        let columns = this.grid.getColumns();
+        let new_columns=[];
+        if (!group.expanded){
+            let index=0;
+            for (let column of columns){
+                new_columns.push(column);
+                index++;
+                if (column.field===group.master_column){
+                    break;
+                }
+
+            }
+            for (let field of group.columns){
+                new_columns.push(this.hidden_columns[field]);
+            }
+            for (let i=index;i<columns.length;i++){
+                new_columns.push(columns[i]);
+            }
+          
+
+        }
+        else{
+
+            for (let column of columns){
+                if (group.columns.indexOf(column.field)===-1){
+                    new_columns.push(column);
+                }
+            }
+
+            
+        }
+         this.grid.setColumns(new_columns);
+         group.expanded=!group.expanded;
+         this.updateGroupPanel();
+
+    }
+
+
+    updateGroupPanel(){
+        let $preHeaderPanel = $(this.grid.getPreHeaderPanel())
+            .width(this.grid.getHeadersWidth())
+            .empty();
+        let self =this;
+        let headerColumnWidthDiff = this.grid.getHeaderColumnWidthDiff();
+        let m, header, lastColumnGroup = '', widthTotal = 0;
+        let columns = this.grid.getColumns();
+        let current_group=null;
+        let current_group_index=0;
+        for (var i = 0; i < columns.length; i++) {
+             current_group_index++;
+            m = columns[i];
+ 
+            if (lastColumnGroup === m.columnGroup && i>0) {
+                widthTotal += m.width;
+                header.width(widthTotal - headerColumnWidthDiff);
+               
+
+            } else {
+                if (lastColumnGroup  && current_group_index !==1 &&current_group_index<=this.column_groups[lastColumnGroup].columns.length){
+                    console.log("column in wrong place")
+                }
+                widthTotal = m.width;
+                header = $("<div class='ui-state-default slick-header-column' />")
+                    .html("<span class='slick-column-name'>" + (m.columnGroup || '') + "</span>")
+                    .width(m.width - headerColumnWidthDiff)
+                    .appendTo($preHeaderPanel);
+                let gr =this.column_groups[m.columnGroup];
+                if (gr && gr.master_column){
+                    let icon="<i class='fas fa-plus-circle'></i>";
+                    if (gr.expanded){
+                        icon="<i class='fas fa-minus-circle'></i>"
+                    }
+                    let el = $(icon).data("group",m.columnGroup)
+                        .click(function(e){
+                            self.expandCollapseGroup($(this).data("group"))
+                        });
+                  header.prepend(el);
+                  current_group_index=0;
+                       
+                }
+           }
+        lastColumnGroup = m.columnGroup;
+        }
+     /* let group_headers= $(".slick-preheader-panel").children();
+     group_headers.sortable({
+        containment: "parent",
+        distance: 3,
+        axis: "x",
+        cursor: "default",
+        tolerance: "intersection",
+        helper: "clone",
+          placeholder: "slick-sortable-placeholder ui-state-default slick-header-column",
+        start: function (e, ui) {
+              ui.placeholder.width(ui.helper.outerWidth() - headerColumnWidthDiff);
+          $(ui.helper).addClass("slick-header-column-active");
+        },
+        beforeStop: function (e, ui) {
+        
+        },
+        stop: function (e) {
+             var j = group_headers.children();
+             j.each(function(index,el){
+                 console.log(index,el);
+             })
+
+  
+        }
+      });*/
+    }
+
+    setUpGroupPanel(options){
+        let $preHeaderPanel = $(this.grid.getPreHeaderPanel())
+            .addClass("slick-header-columns")
+            .css({'left':'-1000px'});
+        
+        $preHeaderPanel.parent().addClass("slick-header-columns");
+      
     }
 
     setValue(id,field,value){
@@ -277,6 +500,10 @@ class MLVTable{
     getTopVisibleRow(){
          let vp = this.grid.getViewport();
          return vp.top;
+    }
+
+    getTopVisibleItem(){
+         return this.grid.getDataItem(this.getTopVisibleRow());
     }
 
     getColumnDictionary(){
@@ -625,6 +852,17 @@ class MLVDataView extends DataView{
         this.custom_filters={};
     }
 
+    getFilters(){
+        let filters=[];
+        for (let filter of this.filters){
+            if (!filter.active){
+                contine
+            }
+            filters.push({field:filter.field,operand:filter.operand,value:filter.value})
+        }
+        return filters; 
+    }
+
     _isItemFiltered(item){
           for (let filter of this.filters){
                 if (!filter.active){
@@ -705,6 +943,12 @@ class MLVDataView extends DataView{
         this.listeners.data_filtered.forEach((func)=>{func(self.getFilteredItems().length)});
     }
 
+
+
+
+
+
+
     _setupSorting(){
         let self = this;
         this.sort_functions={
@@ -765,6 +1009,9 @@ class MLVDataView extends DataView{
                 if (val === undefined){
                     val="";
                 }
+                if (header.write_formatter){
+                    val= header.write_formatter(val);
+                }
                 cols.push(val)
             }
             rows.push(cols.join(delimiter));
@@ -773,12 +1020,14 @@ class MLVDataView extends DataView{
         }
         let data = new Blob([rows.join("\n")],{type:'text/plain'});
        
-         let save = $("<a download></a>").appendTo($("#mlv-iv-control-panel"));
+         let save = $("<a download></a>").appendTo("body");
           
               let text_file = window.URL.createObjectURL(data); 
               save.attr("download",name);
+              save.attr("target","_blank")
               save.attr("href",text_file);
               save[0].click();
+        save.remove();
 
 
     }
@@ -807,12 +1056,19 @@ class MLVDataView extends DataView{
 }
 
 class FilterPanelDataView extends MLVDataView{
+    /**
+    * Creates a data view which synchs with the filter panel provided
+    * @param {Array} data - The list of objects (field to value)
+    * @param {Object} data - The filter panel. The view will automatically
+    * update the filter panel when filtered and will update if the
+    * the filter panel is updated.
+    */
     constructor(data,filter_panel){
         super(data);
         this.filter_panel=filter_panel;
         let self=this;
         this.filter_dimensions={};
-        this.filter_panel.setListener(function(items,ids){
+        this.filter_listener = this.filter_panel.addListener(function(ids){
             self._filterByID(ids)
         })
     }
@@ -852,20 +1108,76 @@ class FilterPanelDataView extends MLVDataView{
                     dim.filter(null)
                 }
 
-                let filter_function = null;
-                if (filter.datatype==="text"){
-                    filter_function=this._getTextFilterFunction(filter.operand,filter.value);
-                }
-                else{
-                    filter_function=this._getNumberFilterFunction(filter.operand,filter.value);
-                }
-                dim.filter(filter_function);
+               
+                dim.filter(this._getFilterFunction(filter));
             }
         }
 
         this.filter_panel.filterChanged();
 
     }
+
+
+    /**
+    * Updates the filter on the supplied field to reflect the changed data
+    * Does nor actually filter the data - use filterData()
+    * @param {string} field - The field whose values have changed in the data
+    */
+
+    dataChanged(field){
+        for (let filter of this.filters){
+            if (filter.field===field && filter.active){
+                let dim =  this.filter_dimensions[field];
+                if (dim){
+                    dim.filter(null);
+                    dim.dispose();
+                }
+                dim = this._getDimension(field);
+                this.filter_dimensions[field]=dim
+
+            }
+        }
+
+    }
+    
+    /**
+    * Gets the data from the view but ignores the filter on the supplied field
+    * Does nor actually update the data just rerturns items
+    * @param {string} field - The field on which not to filter
+    * @returns {Array} - An array of data items 
+    */
+    getDataUnfilter(field){
+         let dim = this.filter_dimensions[field];
+         if (!dim){
+             return this.getFilteredItems();
+         }
+         dim.filter(null);
+         let items = dim.top(1000000)
+         for (let filter of this.filters){
+             if (filter.field===field){
+                 dim.filter(this._getFilterFunction(filter));
+                 break;
+             }
+         } 
+         return items;
+
+    }
+
+    _getFilterFunction(filter){
+         let filter_function = null;
+         if (filter.datatype==="text"){
+            filter_function=this._getTextFilterFunction(filter.operand,filter.value);
+         }
+         else if (filter.datatype==="boolean"){
+             filter_function=this._getBooleanFilterFunction(filter.operand,filter.value);
+         }
+         else{
+             filter_function=this._getNumberFilterFunction(filter.operand,filter.value);
+         }
+         return filter_function;
+    }
+    
+
 
     _getDimension(field){
         return this.filter_panel.ndx.dimension(function(d){
@@ -875,6 +1187,9 @@ class FilterPanelDataView extends MLVDataView{
 
     _getTextFilterFunction(operand,value){
         return function(d){
+             if (d===null){
+                 return false;
+             }
              if (operand=="="){
                 if(!(d.toUpperCase()===value.toUpperCase())){
                     return false;
@@ -897,6 +1212,13 @@ class FilterPanelDataView extends MLVDataView{
              }
              return true;
         };
+    }
+
+
+    _getBooleanFilterFunction(operand,value){
+        return function(d){
+            return d===value;
+        }
     }
 
     _getNumberFilterFunction(operand,value){
@@ -1607,4 +1929,4 @@ class MLVFilterDialog{
     }
 }
 
-export {MLVTable,MLVDataView,FilterPanelDataView,ContextMenu};
+export {MLVTable,MLVDataView,FilterPanelDataView,ContextMenu,MLVSortDialog,MLVDownloadDialog};

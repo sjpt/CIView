@@ -2,15 +2,18 @@ import {pako} from "./vendor/pako_inflate.js";
 
 
 class MLVFileChooser{
-    constructor(callback,filter){
+    constructor(callback,config){
+        if (!config){
+            config={};
+        }
         this.fileInput = $("<input>").attr("type","file").hide();
         this.callback=callback;
-        if (filter){
+        if (config.filter){
             this.fileInput.attr("accept",filter);
         }
         $('<body>').append(this.fileInput);
         this.fileInput.change((event)=>{
-            let f = new MLVFile(event.target.files[0]);
+            let f = new MLVFile(event.target.files[0],config);
             f.readHeader(this.callback);
           
         });
@@ -49,8 +52,12 @@ function mlvUploadFile(file,url,data,callback){
 
 
 class MLVFile{
-    constructor(file){
+    constructor(file,config){
         this.file=file;
+        if (!config){
+            config={}
+        }
+        this.config=config;
         this.is_gz=file.name.endsWith(".gz");
         this.delimiter="\t";
         this.errors=[];
@@ -89,7 +96,7 @@ class MLVFile{
                 break;
             }
         }
-        let headers =lines[header_line].replace('"',"")
+        let headers =replaceAll(lines[header_line],'"');
         let arr1=headers.split("\t");
         let arr2=headers.split(",");
         this.delimiter=",";
@@ -98,33 +105,89 @@ class MLVFile{
             this.delimiter="\t";
             headers=arr1;
         }
-        let types=[];
-        let values = lines[header_line+1].split(this.delimiter);
-        if (headers.length !== values.length){
+       
+     
+        let first_line_values = lines[header_line+1].split(this.delimiter);
+
+        //proobably niche case first line missing header
+        if (this.config.first_header_missing){
+                headers.unshift("count");
+        }
+        if (headers.length !== first_line_values.length){    
             this.errors.push("Rows contains unequal numbers of columns");
             return;
         }
+        //read lines and assign types
+        let types=[];
+        for (let i=0;i<headers.length;i++){
+            types.push("integer");
+        }
 
-        for (let val of values){
-            if (isNaN(val)){
-                types.push("text");
+        for (let n=1;n<10;n++){
+            let line =  lines[header_line+n];
+            if (line === undefined){
+                break;
             }
-            else if(val.includes(".")){
-                types.push("double");
-            }
-            else{
-                types.push("integer");
+            let values =line.split(this.delimiter);        
+            for (let i=0;i<values.length;i++){
+                if (types[i]==="text"){
+                    continue;
+                }
+                let type = getType(replaceAll(values[i],'"'));
+               
+                if (type==="text"){
+                    types[i]="text";
+                    continue;
+                }
+                if (types[i]==="double"){
+                    continue;
+                }
+                if (type === "double"){
+                    types[i]="double";
+                }
+          
             }
         }
+        this.has_headers=false;
+
+        //if 'headers' are of different type probably are headers
+        for (let i =0;i<headers.length;i++){
+            let h_type= getType(headers[i]);
+            if ( h_type==="text" && h_type !== types[i]){
+                this.has_headers=true;
+                break;
+            }
+        }
+        
+      
         this.fields= [];
         let count=0;
         for (let val of headers){
             this.fields.push({"name":val,"type":types[count],"position":count});
             count++;
         }
-        this.first_line_values=values;
+        this.first_line_values=first_line_values;
     }
  
+}
+
+function getType(val){
+    let type ="integer";
+    if (isNaN(val)){
+        type="text";
+    }
+    else if(val.includes(".")){
+           type="double"
+    }
+    return type;
+
+}
+
+function replaceAll(str,rep){
+    while (str.indexOf(rep)!==-1){
+        str= str.replace(rep,"")
+    }
+    return str;
 }
 
 class MLVFileUploadDialog{
@@ -133,26 +196,44 @@ class MLVFileUploadDialog{
             config={};
         }
         this.config=config;
-        this.div = $("<div>").dialog().dialogFix();
+        this.div = $("<div>").dialog({
+            close: ()=>{
+                this.div.dialog("destroy").remove();
+            },
+            title:"Upload File"
+	   }).dialogFix();
         this.file_chooser= new MLVFileChooser(function(file){
             self.displayFileInfo(file)
-        })
-        let but  = $("<button>").text("ChooseFile").click(function(e){
+        },config);
+        let choose_div = $("<div>").appendTo(this.div);
+        this.name_div = $("<span>").css({"margin-right":"10px"}).text("No File").appendTo(choose_div);
+        let but  = $("<button>").attr({"class":"btn btn-sm btn-secondary","id":"file-choose-button"}).text("Choose").click(function(e){
             self.file_chooser.showOpenDialog();
-        }).appendTo(this.div);
-        this.name_div = $("<div>").appendTo(this.div);
+        }).appendTo(choose_div);
+       
         let self = this;
-        this.fields_div=$("<div>").appendTo(this.div);
+        this.div.append($("<label>Fields:</label>").css({"font-weight":"bold"}));
+        this.fields_div=$("<div>").css({"height":"150px","overflow-y":"auto","margin-bottom":"4px"}).attr({id:"fields-header-div"}).appendTo(this.div);
         this.has_header_check= $("<input>").attr({"type":"checkbox","checked":false}).click(function(e){
             self._changeHeaders();
         }).appendTo(this.div);
         this.div.append("<span>Has Headers</span>");
-        this.fields_div=$("<div>").appendTo(this.div);
-        this.upload_but = $("<button>").text("Upload").attr("disabled",true).click(function(e){
+        let upload_text = this.config.button_text?this.config.button_text:"Upload"
+        this.upload_but = $("<button>").attr({"class":"btn btn-sm btn-primary",id:"file-upload-button"}).text(upload_text)
+        .attr("disabled",true).css("float","right").click(function(e){
             self._uploadFile();
         }).appendTo(this.div);
-        this.has_headers=false;
+        this.has_headers=this.config.has_headers;
+        if (this.config.demo_data){
+            this.setupDemo(this.config.demo_data);
+        }
 
+    }
+
+  
+
+    remove(){
+	   this.div.dialog("close");
     }
 
     _changeHeaders(){
@@ -189,8 +270,11 @@ class MLVFileUploadDialog{
                 name=field.name;
             }
                         let select = $("<select><option>text</option><option>integer</option><option>double</option></select>");
+                        if (field.error){
+                            select.css("border","solid 1px red");
+                        }
             select.val(field.type);
-            let input = $("<input>").css({"display":"inline","width":"50%"}).attr("class","field-name-input").val(name).data({"position":n,"field":field,"select":select});
+            let input = $("<input>").css({"display":"inline","width":"50%","margin-right":"5px"}).attr("class","field-name-input").val(name).data({"position":n,"field":field,"select":select});
             div.append(input);
           
 
@@ -213,7 +297,7 @@ class MLVFileUploadDialog{
 
     _uploadFile(){
         if (this.upload_callback){
-            this.upload_callback(this.file,this.getFields());
+            this.upload_callback(this.file,this.getFields(),this.has_headers);
         }
     }
 
@@ -229,35 +313,60 @@ class MLVFileUploadDialog{
         return fields;
     }
 
+    setupDemo(data){
+         this.name_div.text(data.file_name);
+         let index=1;
+         $("#file-choose-button").attr("disabled",true);
+          for (let field of data.fields){
+            this._addHeader(field,index);
+            index++;
+          }
+          this.upload_but.attr("disabled",false)
+
+    }
+
     displayFileInfo(file){
-        this.file=file.file;
         this.fields_div.empty();
-        let error_message="";
+        if (file.errors.length !==0){
+            for (let error of file.errors){
+                this.fields_div.append("<p>"+error+"</p>");
+            }
+            return;
+        }
+        this.file=file.file;
+       
+        let error=false;
         if (this.config.compulsory_fields){
             let c = this.config.compulsory_fields;
-            let index = 1;
-            for (let field of file.fields){
+          
+            for (let index in c){
                 let c_field= c[index];
-                if (!c_field){
+                let f_field=file.fields[index-1]
+                f_field.name=c_field.label;
+                if (f_field.type !== c_field.datatype){
+                    this.fields_div.append("<p>Compulsory field "+c_field.label + " column " + index + " contains the wrong datatype</p>");
+                    f_field.error=true;
+                    error=true;
                 }
-                else{
-                    field.name=c_field.label;
-                    if (field.type !== c_field.datatype){
-                        break;
-                    }
-                }
-                console.log(c_field);
-                index++;
             }
+            
+              
+            //crude way to work out if file has headers
+          
         }
         this.headers=file.fields;
+        this.has_headers=file.has_headers;
+        this.has_header_check.prop("checked",this.has_headers);
+
         this.name_div.text(file.file.name);
         let index=1;
         for (let field of file.fields){
             this._addHeader(field,index);
             index++;
         }
-        this.upload_but.attr("disabled",false);
+        if (!error){
+            this.upload_but.attr("disabled",false);
+        }
     }
 }
 

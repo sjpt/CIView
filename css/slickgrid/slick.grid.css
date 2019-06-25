@@ -22,6 +22,9 @@ classes should alter those!
     color:black;
 }
 
+.slick-preheader-panel .fas{
+  cursor:pointer;
+}
 
 .slick-header.ui-state-default, .slick-headerrow.ui-state-default, .slick-footerrow.ui-state-default, .slick-top-panel-scroller.ui-state-default {
   width: 100%;
@@ -55,7 +58,7 @@ classes should alter those!
   overflow: hidden;
   -o-text-overflow: ellipsis;
   text-overflow: ellipsis;
-  height: 25px;
+  height: 18px;
   line-height: 16px;
   margin: 0;
   padding: 4px;
@@ -64,6 +67,11 @@ classes should alter those!
   border-top: 0px !important;
   border-bottom: 0px !important;
   float: left;
+}
+
+.slick-cell-text-center{
+  width:100%;
+  text-align:center;
 }
 
 

@@ -118,10 +118,17 @@ import {Slick} from "./slick.grid.js";
         filters.push(filter);
     }
 
-    function setFilterInfo(field,operand,value){
+
+
+    function setFilterInfo(field,operand,value,active){
         
         let f= field_to_filter[field];
-        f.active=true;
+        if (active === undefined){
+            f.active=true;
+        }
+        else{
+            f.active=active;
+        }
         if (operand === "<="){
                 f.operand="between";
                 f.value[1]=value

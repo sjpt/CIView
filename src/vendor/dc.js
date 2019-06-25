@@ -37,7 +37,7 @@
  *      .filter('sunday');
  */
 /*jshint -W079*/
-import {crossfilter} from "./crossfilter.js";
+import {crossfilter} from "./crossfilter/crossfilter.js";
 import {d3} from "./d3.js";
 
 var dc = {
@@ -1074,7 +1074,7 @@ dc.config = (function () {
         '#a1d99b', '#c7e9c0', '#756bb1', '#9e9ac8', '#bcbddc',
         '#dadaeb', '#636363', '#969696', '#bdbdbd', '#d9d9d9'];
 
-    var _defaultColors = _schemeCategory20c;
+    var _defaultColors = d3.schemeSet1.slice(1,9);
 
     /**
      * Set the default color scheme for ordinal charts. Changing it will impact all ordinal charts.

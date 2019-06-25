@@ -10,8 +10,34 @@
 }
 
 
-.chart-label{
+.mlv-chart-label{
 	cursor:move;
+}
+
+.ui-menu{
+	background:#ffffff;
+	box-sizing: border-box;
+	font-size:14px;
+
+}
+
+.mlv-cm-icon{
+	padding-top:3px;
+	float:left;
+	width:20px;
+}
+
+.ui-menu-item .ui-state-active{
+	border:1px solid #003eff;
+	background:#007fff;
+	font-weight:normal;
+	color:#ffffff;
+}
+
+.ui-menu-item-wrapper {
+	box-sizing: border-box;
+	border:1px solid #ffffff;
+	cursor:pointer;
 }
 
 
@@ -23,7 +49,58 @@
 
 }
 
-.civ-chart-dialog,.add-chart-dialog  label {
+.dc-chart g.row text{
+   fill:black !important;	
+}
+
+
+.civ-main-panel{
+	height:calc(100% - 30px) !important;
+	
+}
+
+.civ-filter-panel{
+	overflow-y:scroll;
+	scrollbar-width:thin;
+	overflow-x:hidden;
+
+}
+
+.civ-filter-panel::-webkit-scrollbar {
+  width: 5px;
+}
+
+/* Track */
+.civ-filter-panel::-webkit-scrollbar-track {
+  background:white; 
+}
+ 
+/* Handle */
+.civ-filter-panel::-webkit-scrollbar-thumb {
+  background: #E0E0E0
+}
+
+/* Handle on hover */
+.civ-filter-panel::-webkit-scrollbar-thumb:hover {
+  background: #555; 
+}
+
+
+
+
+.civ-menu-bar{
+	height:30px;
+	width:100%;
+}
+
+.civ-menu-bar button{
+	padding-top:2px;
+	padding-bottom:2px;
+	margin-left:2px;
+	margin-right:2px;
+}
+
+.civ-chart-dialog,.add-chart-dialog,.tagging-dialog  label {
 	font-weight:bold;
 	margin-bottom:2px;
 	margin-top:3px;
@@ -41,20 +118,36 @@
 	
 }
 
-/*.add-chart-dialog label {
-	font-weight:bold;
-	margin-bottom:2px;
+.mlv-reset-btn{
+	height:20px;
+	padding-left:2px;
+	padding-right:2px;
+	padding-top:0px;
+	padding-bottom:3px;
+	margin-left:5px;
+}
+
+.civ-chart-dialog button{
 	margin-top:3px;
-}
-*/
-
-.add-chart-dialog div{
-	margin-top:5px;
-	margin-bottom:5px;
-	display:flex;
+	margin-bottom:3px;
 }
 
-.add-chart-dialog select{
+.civ-field-dialog label {
+	font-weight:bold;
+	margin-bottom:1px;
+	margin-top:3px;
+	display:block;
+}
+
+.civ-field-dialog button{
+	margin-left:2px;
+	padding-top:2px;
+	padding-bottom:2px;
+}
+
+
+
+.civ-field-dialog select{
 	margin-right:5px;
 }
 
@@ -63,4 +156,18 @@
 	width: 40px;
 	height:20px;
 	border-radius:6px;
+}
+
+.control-bar .fas,.fa{
+	font-size:18px;
+	margin-left:3px;
+	margin-right:3px;
+	cursor:pointer;
+}
+
+.mlv-chart-option-menu{
+	display:none;
+	position:absolute;
+	right:0px;
+	cursor:pointer;
 }

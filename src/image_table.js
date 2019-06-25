@@ -1,10 +1,15 @@
 class MLVImageTable {
     constructor(parent_div,data_view,base_url){
+        if (typeof parent_div === "string"){
+            parent_div =$("#"+parent_div);
+        }
         this.row_first=0;
         this.row_last=139;
         this.tile_height=205;
         this.tile_width=205;
         let self =this;
+        this.display_columns=[];
+        this.flipped_tiles={};
 
 
         let im = new Image();
@@ -36,6 +41,9 @@ class MLVImageTable {
      
         this.canvas.css({"position":"relative","background-color":" LightGray"}).click(function(e){
             let img =$(e.originalEvent.srcElement);
+            if (!img.attr("id")){
+                img=img.parent();
+            }
             let id= img.attr("id");
             if (!id){
                 return;
@@ -65,7 +73,16 @@ class MLVImageTable {
             }
             //self.mlv_iv.goToLocation(id);
           
+        }).mouseover(function(e){
+             let img =$(e.originalEvent.srcElement);
+             let id = img.attr("id");
+             if (id){
+                 console.log(id);
+             }
+
         });
+
+       
         this._setCanvasHeight();
 
         this.view_port.append(this.canvas).scroll(function(e){
@@ -81,14 +98,22 @@ class MLVImageTable {
 
         this.listeners={
        		"image_clicked":new Map(),
+       		"iamge_over":new Map(),
        		"data_changed":new Map(),
        		"tagging":new Map()
        	};
 
        	this.highlight_colors=null;
 
+       	this.tag_color_palletes={};
 
 
+
+    }
+
+    setTagColorPallete(field,pallete){
+        this.tag_color_palletes[field]=pallete;
+        this.tag_color_palletes[field]["None"]="";
     }
 
     addListener(type,func,id){
@@ -103,12 +128,28 @@ class MLVImageTable {
     	return id;
     }
 
+    flipTileOnClick(flip){
+        let self = this;
+        if (flip){
+            this.listeners["image_clicked"].set("__flip_tile",function(e,item,img){
+                self.flipTile(img,item);
+            })
+        }
+        else{
+             this.listeners["image_clicked"].delete("__flip_tile");
+        }
+    }
+
     removeListener(type,id){
     	let listener = this.listeners[type];
     	if (!listener){
     		return false;
     	}
     	return listener.delete(id);
+    }
+
+    setImageWidth(width){
+        this.setImageDimensions([width,Math.round((width/this.t_width)*this.t_height)])
     }
 
 
@@ -118,6 +159,73 @@ class MLVImageTable {
         this.tile_height=parseInt(dim[1])+this.margin;
         this.t_width = parseInt(dim[0]);
         this.t_height = parseInt(dim[1]);
+    }
+
+    getInformationTile(item,columns,data){
+        let si= this.t_height<this.t_width?this.t_height:this.t_width;
+        let div = $("<div>").css({
+            height:this.t_height,
+            width:this.t_width,
+            overflow:"hidden",
+            "background-color":"white",
+            "font-size":(si/12)+"px"
+
+        });
+
+        for (let col of columns){
+            div.append("<label>"+col.name+"<label><br>");
+            div.append(item[col.field]+"<br>")
+        }
+        if (data){
+            div.css({
+                height:data.height,
+                width:data.width,
+                position:"absolute",
+                left:data.left,
+                top:data.top
+            });
+            div.addClass(data.class);
+            div.attr("id",data.id);
+        }
+        return div;
+    }
+
+    flipTile(img,data){
+        let div=null;
+      	if (img.parent().hasClass("flip")){
+      		return;
+      	}
+      	if (img.hasClass("info-tile")){
+      		let url = this.base_url+data.id+".png";
+            div = $("<img src='"+url+"'</img>").addClass(img[0].className).removeClass("info-tile");
+            delete data.__info_tile__
+            delete this.flipped_tiles[data.id]
+
+
+      	}
+      	else{
+      		div = civ.image_table.getInformationTile(data,[{name:"cpg Islands",field:"field1"},
+      														{name:"Peak Width",field:"field4"}]);
+      		div.addClass(img[0].className+" info-tile");
+      		data.__info_tile__=true;
+      		for (let id in this.flipped_tiles){
+      		    let tile = $("#mlv-tile-"+id);
+      		    let info = this.data_view.getItemById(id);
+      		    if (tile.length===0){
+      		        delete info.__info_tile__;
+      		        delete this.flipped_tiles[id];
+      		        continue;
+      		    }
+      		    this.flipTile(tile,info);
+      		}
+      		this.flipped_tiles[data.id]=true;
+
+
+      	}
+      	
+      	div.attr("id",img.attr("id"));
+      	MLVImageTable.flip(img,div);
+
     }
 
 
@@ -191,7 +299,8 @@ class MLVImageTable {
                 this._addRow(n);
             }
         }
-        else if (begin_row===this.row_displayed_first){
+        else if (begin_row===this.row_displayed_first && begin_row!==0){
+            console.log(this.row_displayed_first);
             return;
         }
         else{
@@ -235,6 +344,9 @@ class MLVImageTable {
         this.width = this.parent.width();
         this.height = this.parent.height();
         this.view_port.height(this.height).width(this.width);
+        if (this.width < this.tile_width+(this.margin*2) && this.width !==0){
+           this.setImageWidth(this.width-(this.margin*2));
+        }
         this.num_per_row= Math.floor((this.width-10)/this.tile_width);
     }
 
@@ -333,8 +445,22 @@ class MLVImageTable {
                 }
 
             }
-            let url = this.base_url+item.id+".png";
-            let img = $("<img src='"+url+"' style='"+border+"height:"+this.t_height+"px;width:"+this.t_width+"px;position:absolute;box-sizing:border-box;left:"+left+"px"+";top:"+top+"px' class='mlv-tile mlv-tile-row-"+row+"' id='mlv-tile-"+item.id+"'>");
+            let img=null
+            if (!item.__info_tile__){
+                let url = this.base_url+item.id+".png";
+                img = $("<img src='"+url+"' style='"+border+"height:"+this.t_height+"px;width:"+this.t_width+"px;position:absolute;box-sizing:border-box;left:"+left+"px"+";top:"+top+"px' class='mlv-tile mlv-tile-row-"+row+"' id='mlv-tile-"+item.id+"'>");
+            }
+            else{
+                let data={
+                    left:left+"px",
+                    top:top+"px",
+                    height:this.t_height+"px",
+                    width:this.t_width+"px",
+                    class:"info-tile mlv-tile mlv-tile-row-"+row,
+                    id:"mlv-tile-"+item.id
+                }
+                img = this.getInformationTile(item,[{name:"ddd",field:"field1"}],data);
+            }
               
             this.canvas.append(img);
         }
@@ -344,15 +470,11 @@ class MLVImageTable {
 
 class MLVImageTableControls{
     constructor(app,div){
-        this.div=div;
+        this.div=div.attr("class","control-bar");
         this.app=app;
         let self = this;
-        div.append($("<i class='fas fa-tags'></i>")
-                .css({"cursor":"pointer"})
-                .click(function(){
-                    new TaggingDialog(self.app,{name:"tags",label:"Tags"},["Peak","Noise"]);
-                 }));
-        let slider = $("<div>").css({width:"250px",display:"inline-block"}).slider({
+        let slider = $("<div>").attr({"id":"mlv-it-image-slider"})
+            .css({width:"250px",display:"inline-block"}).slider({
             max:200,
             min:0,
             value:100,
@@ -369,6 +491,10 @@ class MLVImageTableControls{
         this.div.children().css({"margin-left":"5px"});
     }
 
+    addElement(element){
+        this.div.append(element);
+    }
+
     _setUpListeners(){
         let self =this;
         this.app.data_view.onRowCountChanged.subscribe(function (e, args) {
@@ -382,13 +508,31 @@ class MLVImageTableControls{
 
 
 class TaggingDialog{
-    constructor(app,field,options){
+    constructor(app,field,button){
         let self=this;
         this.field=field;
-        this.options=options;
-        this.color_pallete=["#7FFF00","#DC143C","blue"];
+        this.default_colors=["#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"];
+        this.options=app.tag_color_palletes[field];
+        if (!this.options){
+            this.options={"None":""};
+            app.tag_color_palletes[field]=this.options;
+        }
+
+        let buttons=[{
+            text:"Cancel",
+            click:function(e){
+                self.div.dialog("close");
+            }
+
+        }];
+        if (button){
+            buttons.push({
+                text:button.text,
+                click:button.func
+            })
+        }
         this.app=app;
-        this.div = $("<div>");   
+        this.div = $("<div>").attr("class","tagging-dialog");   
         this.div.dialog({
             autoOpen: true,      
             close:function(){
@@ -398,8 +542,9 @@ class TaggingDialog{
                 self.app.listeners.tagging.forEach((func)=>{func(false)});   
             },
             title: "Tagging",
+            buttons:buttons,
             width:250
-        });
+        }).dialogFix();
         this.init();
         this.app.listeners.tagging.forEach((func)=>{func(true)});      
         
@@ -416,48 +561,157 @@ class TaggingDialog{
             let im = $("#mlv-tile-"+item.id);
             if (option === "None"){
                 im.css("border","none");
-                delete item[this.field.name];
+                delete item[this.field];
             }
             else{
-                item[this.field.name]=option;
+                item[this.field]=option;
                 let color = this.app.highlight_colors.colors[option];
                 im.css("border","4px solid "+color);
             }
         }
-        let field= this.field.name
-        this.app.listeners.data_changed.forEach((func)=>{func(field,range)});       
+        
+        this.app.listeners.data_changed.forEach((func)=>{func(this.field,range)});       
     }
+
+  
 
      
     init(){
         let self=this;
-        this.options.push("None");
         let option_grouo_id= "sc-ra-name-"+this.id;
-        let count=0;
-        let colors= {};
-        for (let option of this.options){
-            let checked=(count===0)
-            let div = $("<div>").height(40);
-            div.append($("<input>").attr({type:"radio",value:option,checked:checked,name:"tag-option-radio"}));
-            div.append("<span>"+option+"</span>");
-           
-            this.div.append(div);
-            if (option !=="None"){
-                let color_input=$("<input>").attr({type:"color","class":"tag-option-color"}).css({"display":"inline","width":"40px","float":"right"}).height(20).val(this.color_pallete[count]).appendTo(div);
-                colors[option]=this.color_pallete[count];
-            }
-            count++;
+        this.option_count=0;
+        this.option_colors= {};
+        for (let option in this.options){
+            if (option==="None"){
+                continue;
+            }    
+            let div = this._getOptionDiv(option);
+            this.div.append(div);     
         }
-        this.app.highlight_colors={"field":this.field.name,"colors":colors};
-        this.app.show();
 
+        let div = this._getOptionDiv("None");
+        this.div.append(div);     
+
+        this.div.append("<label>Add Category</label>").css("display","block");
+        let t_div=$("<div>").appendTo(this.div);
+        let input = $("<input>").appendTo(t_div);
+        let but = $("<button>").text("Add")
+            .attr("class","btn btn-sm btn-secondary")
+            .css("margin-left","5px")
+            .click(function(e){
+                let option = input.val();
+                if (!option || self.options[option]){
+                    return; 
+                }
+                let index= Object.keys(self.options).length;
+                self.options[option]=self.default_colors[index];
+                input.val("");
+                let div = self._getOptionDiv(option);
+                div.insertBefore("#sc-ra-none-div");
+                self.div.resizeDialog();
+             }).appendTo(t_div);
+
+        this._updateTable();
+       
         this.listener= this.app.addListener("image_clicked",function(event,data,img,range){
              self.imageClicked(event,data,img,range)
         })
+    }
 
-    }   
+
+    _updateTable(){
+        this.app.highlight_colors={"field":this.field,"colors":this.options};
+        this.app.show();
+    }
+
+    getOptionColors(){
+        let ret={}
+        for (let opt in this.options){
+            if (opt!=="None"){
+                ret[opt]=this.options[opt];
+            }
+        }
+        return ret;
+    }
+
+
+    _getOptionDiv(option){
+        let self = this;
+        let checked=(this.option_count===0)
+        let div = $("<div>").height(40);
+        if (option==="None"){
+            div.attr("id","sc-ra-none-div");
+        }
+        div.append($("<input>").attr({type:"radio",value:option,checked:checked,name:"tag-option-radio"}));
+        div.append("<span>"+option+"</span>");
+        if (option !=="None"){
+            let color_input=$("<input>").attr({type:"color","class":"tag-option-color"})
+                .css({"display":"inline","width":"40px","float":"right"})
+                .height(30).val(this.options[option]).appendTo(div)
+                .data("option",option)
+                .on("change",function(e){
+                    self.options[$(this).data("option")]=$(this).val();
+                    self._updateTable();
+                });
+            this.option_count++;
+        }
+       
+        return div;
+    } 
+}
+
+MLVImageTable.flip_count=0;
+
+MLVImageTable.flip = function(from,to,length){
+    if (!length){
+        length=1.0;
+    }
+    let b = MLVImageTable.flip_count;
+    let flipper = $("<div>").attr("class","flipper").attr("id","ee"+b);
+	from.wrap(flipper);
+	flipper= $("#ee"+b).append(to);
+
+	let container =  $("<div>").attr("class","flip-container").attr("id","ff"+b);
+	flipper.wrap(container);
+	container=$("#ff"+b);
+	MLVImageTable.flip_count++;
+	from.addClass("front");
+	let h = from.height();
+	let w = from.width();
+    to.height(h)
+    	.width(w)
+    	.addClass("back");
+    let left = from.css("left");
+    let top = from.css("top");
+	let tr= "translate("+from.css("left")+","+from.css("top")+")";
+    container.width(w).height(h).css({
+    	position:"absolute",
+    	left:left,
+    	top:top
+    });
+    from.css("position","static");
+    //flipper.append(to);
+    flipper.css({
+        transition:length+"s"
+    });
+ 
+    flipper.addClass("flip");
+    setTimeout(function(){
+    	from.remove();
+
+    	flipper.unwrap();
+    	to.unwrap();
+    	to.removeClass("back");
+    	to.css({
+    		position:"absolute",
+    		left:left,
+    		top:top
+
+    	})
+
+    },(length*1000)+25);
 }
 
 
 
-export {MLVImageTable,MLVImageTableControls};
+export {MLVImageTable,MLVImageTableControls,TaggingDialog};

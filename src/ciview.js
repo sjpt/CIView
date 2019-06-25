@@ -1,7 +1,7 @@
-import {FilterPanel}  from "./graphs.js";
+import {FilterPanel,AddChartDialog}  from "./graphs.js";
 import {dc} from "./vendor/dc.js";
 import {MLVImageTable,MLVImageTableControls} from "./image_table.js";
-import {FilterPanelDataView} from "./mlv_table.js";
+import {FilterPanelDataView,MLVSortDialog} from "./mlv_table.js";
 
 class CIView{
 
@@ -11,26 +11,34 @@ class CIView{
 		let self=this;
 
 		this.filters={};
+		this.columns=config.columns?config.columns:{};
+		this.sort_columns=[];
 
 		
 		let div = $("#"+config.table_div);
 		this.control_div=$("<div>").css({width:"100%",height:"26px"}).attr("id","civ-control").appendTo(div);
-		let table_div= $("<div>").css({top:"25px",height:"calc(100% - 26px)"}).attr("id","civ-table").appendTo(div);
+		let image_table_div= $("<div>").css({top:"25px",height:"calc(100% - 26px)"}).attr("id","civ-table").appendTo(div);
 		let grid_div = $("<div>")
-		this.filter_panel = new FilterPanel(config.filter_div,config.data);
+		this.filter_panel = new FilterPanel(config.filter_div,config.data,
+							{
+								menu_bar:true,
+								graphs:config.saved_graphs
+							});
+		this.filter_panel.setColumns(this.columns);
 		this.data_view =  new FilterPanelDataView(null,this.filter_panel);
-		this.data_view.addFilter({name:"Peak Width",datatype:"double",field:"field4"});
-		this.image_table =  new MLVImageTable(table_div,this.data_view,config.image_base_url);
+		this.image_table =  new MLVImageTable(image_table_div,this.data_view,config.image_base_url);
 		this.data = config.data;
+		this.base_url = config.image_base_url;
+		if (config.images){
+			this.filter_panel.setConfigAttribute("images",config.images);
+		}
+		
 
-		new MLVImageTableControls(this.image_table,this.control_div);
+		let ic =new MLVImageTableControls(this.image_table,this.control_div);
 
 		
-		for (let item of config.graph_groups){
-			for (let graph of item.graphs){
-				this.filter_panel.addChart(graph.type,graph.params,graph.name);	
-			}		
-			
+		for (let graph of config.graphs){
+			this.filter_panel.addChart(graph.type,graph.params,graph.name,graph.id,graph.location);		
 		}
 		this.filter_panel.refresh();
 		this.data_view.setItems(config.data);
@@ -42,24 +50,30 @@ class CIView{
          	self.image_table.show(1);
         });
 
+        let sort_but = $("<i class='fas fa-sort-alpha-up'></i>").click(function(e){
+        	self.showSortDialog();
+        });
+        ic.addElement(sort_but);
 	}
 
-	addFilterSet(name,config,div){
-			this.filter_panel.addFilterSet(name,null,div);
-			for (let graph of config){
-				this.filter_panel.addChart(name,graph.type,graph.params,graph.name)
-			}
 
-	}
 
 	addGraph(panel_name,type,params,name){
 		this.filter_panel.addChart(panel_name,type,params,name)
 	}
 
-
-	removeFilterSet(name,empty_only){
-		this.filter_panel.removeFilterSet(name,empty_only);
+	changeImageSize(percent){
+		let val = percent/100;
+		let app = this.image_table;
+		let width = parseInt(app.img_width*val);
+        let height= parseInt(app.img_height*val);
+        app.setImageDimensions([width,height]);
+        app.show();
+        $("#mlv-it-image-slider").slider("value",percent);
 	}
+
+
+
 
 
 
@@ -87,6 +101,10 @@ class CIView{
 		dim.remove();
 		delete this.filters[name];
 
+	}
+
+	addIcon(icon){
+		this.control_div.append(icon);
 	}
 
 	addButton(text,func){
@@ -119,7 +137,25 @@ class CIView{
 		chart.changeFields(new_field);
 	}
 
+	showSortDialog(){
+		let self = this;
+		new MLVSortDialog(this.data_view,this.columns,this.sort_columns,
+		function(sort_columns){
+			self.sort_columns=sort_columns;
+			self.image_table.show(1);
+		})
+	}
 
+	showAddChartDialog(){
+		let cols=[];
+		let self=this;
+		for (let i in this.columns){
+			cols.push(this.columns[i]);
+		}
+		new AddChartDialog(cols,function(data){
+    		self.filter_panel.addChart(data.type,data.param,data.label,null,{x:0,y:0,height:3,width:3});
+    	},{base_url:this.base_url})
+	}
 
 }
 
