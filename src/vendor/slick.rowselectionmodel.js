@@ -92,6 +92,9 @@ import {Slick} from "./slick.grid.js";
     }
 
     function handleKeyDown(e) {
+      if (e.which == Slick.keyCode.UP || e.which == Slick.keyCode.DOWN){
+          _grid.tagging_field_clicked=false;
+      }
       var activeRow = _grid.getActiveCell();
       if (_grid.getOptions().multiSelect && activeRow 
       && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey 

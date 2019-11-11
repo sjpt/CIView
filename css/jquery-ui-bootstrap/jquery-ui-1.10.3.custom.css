@@ -1350,9 +1350,12 @@ button.ui-button::-moz-focus-inner {
 	font-weight: bold;
 	margin-top: 1px;
 	margin-bottom: 5px;
-	padding: 2px 5px;
+	padding: 3px 5px;
 	text-overflow: ellipsis;
 	overflow: hidden;
+	white-space:nowrap;
+	overflow:hidden;
+	width:90%;
 }
 
 .ui-dialog-titlebar .ui-tab{

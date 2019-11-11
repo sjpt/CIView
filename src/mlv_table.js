@@ -116,6 +116,7 @@ class MLVTable{
         MLVTable.count++;
         this.element_id=element_id;
         this.filters=[];
+        this.tag_color_palletes={};
         let options = {
             enableCellNavigation: true,
             enableColumnReorder: true,
@@ -128,11 +129,14 @@ class MLVTable{
         for (let o in extra_options){
             options[o]=extra_options[o];
         }
+
+       
         
         this.data_view=data_view?data_view:new MLVDataView();
+        columns=this.parseColumns(columns,options);
         
 
-        columns=this.parseColumns(columns,options);
+       
       
         this.grid= new SlickGrid("#"+element_id,this.data_view,columns,options);
         //need to show any filter icons
@@ -146,9 +150,9 @@ class MLVTable{
         
         let self = this;
         this.listeners={
-            "scroll_listener":[],
-            "sort_listener":[],
-            "row_clicked_listener":[]
+            "scroll_listener":new Map(),
+            "sort_listener":new Map(),
+            "row_clicked_listener":new Map()
         };
         this.scroll_timeout=null;
         this.scroll_timeout_length=200;
@@ -205,11 +209,130 @@ class MLVTable{
     }
 
 
+    taggingStarted(tagger){
+        this.tagger=tagger;
+        //this.temp_model = this.grid.getSelectionModel(); 
+        //this.grid.setSelectionModel(null);
+        let columns = this.grid.getColumns();
+        for (let col of columns){
+            if (col.field===tagger.field){
+                col.formatter= function(a,b,c){
+                    let color = tagger.options[c]
+                    if (!color){
+                        return c
+                    }
+                    return "<div style='width:100%;background-color:"+color+"'>"+c+"</div>";
+                }
+                break;
+            }
+
+        }
+        this.grid.setColumns(columns);
+    }
+
+    tagAll(){
+        let items = this.data_view.getFilteredItems();
+        let option = this.tagger.selected_option;
+        if(!option){
+            return;
+        }
+        let field = this.tagger.field
+        if (option==="None"){
+            option=null;
+        }
+        for (let item of items){
+            if (option){
+                item[field]=option
+            }
+            else{
+                delete item[field];
+            }
+        }
+        this.data_view.listeners.data_changed.forEach((func)=>{func(field)});
+        this.grid.invalidate();
+        this.grid.render();
+    }
+
+    deleteTag(tag){
+        let items = this.data_view.getItems();
+        let field = this.tagger.field;
+        for (let item of items){
+
+            if (item[field]===tag){
+                delete item[field];
+            }
+        }
+        this.grid.invalidate();
+        this.grid.render();
+        
+    }
+
+    updateTags(){
+        this.grid.invalidate();
+        this.grid.render();
+    }
+
+
+    taggingStopped(){
+        let columns = this.grid.getColumns();
+        for (let col of columns){
+            if (col.field===this.tagger.field){
+               delete col.formatter
+               break;
+            }
+
+        }
+        this.grid.setColumns(columns);
+        this.tagger=null;
+        delete this.last_tagged;
+        //this.grid.setSelectionModel(this.temp_model);
+        //delete this.temp_model;
+         
+    }
+
+    tagSelected(){
+        this.setTags(this.grid.getSelectedRows());
+    }
+
+    setTags(rows){
+        let field = this.tagger.field;
+        for (let row of rows){
+            let item = this.grid.getDataItem(row);
+            if (this.tagger.selected_option==="None"){
+                delete  item[field]
+            }
+            else{
+                item[field]=this.tagger.selected_option;
+            }
+        }
+        this.grid.invalidateRows(rows);
+        this.grid.render();
+        this.data_view.listeners.data_changed.forEach((func)=>{func(field)});
+    
+    }
 
 
 
-    addListener(type,func){
-        this.listeners[type].push(func);
+
+
+    addListener(type,func,id){
+        let listener = this.listeners[type];
+    	if (!listener){
+    		return null;
+    	}
+    	if (!id){
+    		id=Math.round(Math.random()*100000)+""
+    	}
+    	listener.set(id,func);
+    	return id;
+    }
+
+    removeListener(type,id){
+    	let listener = this.listeners[type];
+    	if (!listener){
+    		return false;
+    	}
+    	return listener.delete(id);
     }
 
     parseColumns(columns,options){
@@ -372,6 +495,54 @@ class MLVTable{
          group.expanded=!group.expanded;
          this.updateGroupPanel();
 
+    }
+
+    addColumns(cols){
+        let new_groups={};
+        for (let column of cols){
+          if (!column.id){
+              column.id=column.field;
+          }
+          if(column.filterable){
+            this.data_view.addFilter(column);
+          }
+          if (column.columnGroup){
+                let gr = this.column_groups[column.columnGroup];
+               new_groups[column.columnGroup]=true;
+                if (!gr){
+                     
+                    gr = {columns:[]};
+                    this.column_groups[column.columnGroup]=gr;
+                }
+
+        
+              
+                if (column.master_group_column){
+                    gr.master_column=column.field;
+                    gr.expanded=true;
+                }
+                else{
+                    gr.columns.push(column.field)
+                }
+            }
+        }
+        for (let column of cols){
+            let cg = this.column_groups[column.columnGroup];
+            if (cg && cg.master_column){
+                if (!column.master_group_column){
+                    this.hidden_columns[column.field]=column
+                }
+
+            }     
+        }
+
+        let gr = this.grid.getColumns();
+        gr = gr.concat(cols);
+        this.grid.setColumns(gr);
+       for (let gr in new_groups){
+            this.expandCollapseGroup(gr)
+        }
+        
     }
 
 
@@ -540,7 +711,7 @@ class MLVTable{
 
     showFilterDialog(single_field){
        
-        new MLVFilterDialog2(this.data_view,single_field,
+        new MLVFilterDialog(this.data_view,single_field,
                                 ()=>{
                                     if (this.grid.getOptions().no_hide_filter){
                                         this.grid.invalidate();
@@ -568,9 +739,8 @@ class MLVTable{
             self.grid.invalidate();
             self.grid.render();
             let vp = self.grid.getViewport();
-            for (let func of self.listeners['sort_listener']){
-                 func(vp.top,vp.bottom);
-            }
+            self.listeners.sort_listener.forEach((func)=>{func(vp.top,vp.bottom)});
+           
 
         });
     }
@@ -585,6 +755,13 @@ class MLVTable{
 
 
     }
+
+    resetAllFilters(){
+        this.data_view.resetAllFilters();
+        this._updateFilterIcons();
+        $(".mlv-filter-dialog").dialog("close")
+     }
+    
 
     _updateFilterIcons(){
         for (let filter of this.data_view.filters){
@@ -612,9 +789,8 @@ class MLVTable{
             self.grid.invalidate();
             self.grid.render();
             let vp = self.grid.getViewport();
-            for (let func of self.listeners['sort_listener']){
-                 func(vp.top,vp.bottom);
-            }
+            self.listeners.sort_listener.forEach((func)=>{func(vp.top,vp.bottom)});
+
           });
 
        
@@ -624,20 +800,27 @@ class MLVTable{
             clearTimeout(self.scroll_timeout);
             self.scroll_timeout=setTimeout(function(){
                 let vp = self.grid.getViewport();
-                for (let func of self.listeners["scroll_listener"]){                 
-                    func(vp.top,vp.bottom);
-                }
+                self.listeners.scroll_listener.forEach((func)=>{func(vp.top,vp.bottom)});
+               
             },
             self.scroll_timeout_length);
         });
 
       this.grid.onClick.subscribe(function(e, args) {
+           self.grid.tagging_field_clicked= self.tagger && self.grid.getColumns()[args.cell].field==self.tagger.field;
            let dataItem = args.grid.getDataItem(args.row);
            let col=args.grid.getColumns()[args.cell];
-             for (let func of self.listeners["row_clicked_listener"]){                 
-                    func(dataItem,col,e);
-             }
+           self.listeners.row_clicked_listener.forEach((func)=>{func(dataItem,col,e)});
+          
       });
+
+      this.grid.onSelectedRowsChanged.subscribe(function (e, args) {
+		  if (self.tagger && self.tagger.selected_option){
+               if (self.grid.tagging_field_clicked){
+                self.setTags(args.rows);
+               }
+           }
+	  });
      
     
 
@@ -654,6 +837,8 @@ class MLVTable{
                 $(args.node).prepend(filter_icon);
            }
        });
+
+    
     
         
         
@@ -681,14 +866,18 @@ MLVTable.count=0;
 
 class MLVDataView extends DataView{
     constructor(data){   
-        super(data);
+        super();
         this.search_position=0;
         this._setupSorting();
         this.listeners={
             "data_filtered":new Map(),
+            "data_changed":new Map()
         };
         this.custom_filters={};
         this.filtered_ids={};
+        if (data){
+            this.setItems(data);
+        }
     }
 
      addListener(type,func,id){
@@ -852,6 +1041,20 @@ class MLVDataView extends DataView{
         this.custom_filters={};
     }
 
+    resetAllFilters(){
+        for (let filter of this.filters){
+            filter.active=false;
+		 if (filter.datatype!=="text"){
+              filter.info={max:Number.MIN_SAFE_INTEGER,min:Number.MAX_SAFE_INTEGER}
+            }
+            else{
+              filter.datatype={values:{}}
+           }
+        }
+        this.custom_filters={};
+     }
+
+
     getFilters(){
         let filters=[];
         for (let filter of this.filters){
@@ -953,6 +1156,8 @@ class MLVDataView extends DataView{
         let self = this;
         this.sort_functions={
             text:function sorterStringCompare(a, b) {
+                    a=a?a:"";
+                    b=b?b:"";
                     a=a.toUpperCase();
                     b=b.toUpperCase();
                     return (a === b ? 0 : (a > b ? 1 : -1));
@@ -1053,6 +1258,66 @@ class MLVDataView extends DataView{
                 return 0;
             }); 
     }
+
+    getMinMax(field){
+        
+        let max = Number.MIN_SAFE_INTEGER;
+        let min = Number.MAX_SAFE_INTEGER;
+
+
+        for (let item of this.getItems()){
+            if (isNaN(item[field])){
+                continue;
+            }
+
+            if (item[field]>max){
+                max=item[field];
+            }
+            if (item[field]<min){
+                min=item[field]
+            }
+
+
+        }
+        return [min,max];
+        
+    }
+
+
+
+    groupAndOrder(field,max_values){        
+        let t_dict={}
+        for (let item of this.getItems()){
+            let q= t_dict[item[field]];
+            if (!q){
+                t_dict[item[field]]=1;
+            }
+            else{
+                t_dict[item[field]]++;
+            }
+        }
+        let arr=[];
+        for (let v in t_dict){
+            arr.push({"value":v,"count":t_dict[v]})
+        }
+        arr.sort(function(a,b){
+            return b.count-a.count;
+        });
+        let ret_arr=[];
+        let max=arr.length;
+        if (max_values){
+            if (max_values<arr.length){
+                max=max_values;
+            }
+        }
+        for (let n=0;n<max;n++){
+            ret_arr.push(arr[n].value)
+        }
+        return ret_arr;
+
+    }
+
+    
 }
 
 class FilterPanelDataView extends MLVDataView{
@@ -1063,13 +1328,27 @@ class FilterPanelDataView extends MLVDataView{
     * update the filter panel when filtered and will update if the
     * the filter panel is updated.
     */
-    constructor(data,filter_panel){
-        super(data);
+    constructor(filter_panel){
+
+        super();
+        let data = filter_panel.ndx.getOriginalData();
+        let copy=[]
+        for (let item of data){
+            copy.push(item);
+        }
+        this.setItems(copy);
         this.filter_panel=filter_panel;
         let self=this;
         this.filter_dimensions={};
         this.filter_listener = this.filter_panel.addListener(function(ids){
             self._filterByID(ids)
+        });
+        this.data_listener = this.addListener("data_changed",function(field){
+            let dim = self.filter_dimensions[field];
+            if (dim){
+                dim.dirty=true;
+            }
+            self. filter_panel.dataChanged(field);
         })
     }
 
@@ -1103,9 +1382,12 @@ class FilterPanelDataView extends MLVDataView{
                     dim = this._getDimension(filter.field);
                     this.filter_dimensions[filter.field]=dim;
                 }
-                else{
+                else if(dim.dirty){
                     //is this necessary?
-                    dim.filter(null)
+                    dim.filter(null);
+                    dim.dispose();
+                    dim =  this._getDimension(filter.field);
+                    delete dim.dirty;
                 }
 
                
@@ -1460,7 +1742,7 @@ class MLVSortDialog{
 
 
 
-class MLVFilterDialog2{
+class MLVFilterDialog{
     constructor(data_view,only_field,callback,no_hide){
         this.data_view=data_view;
         this.only_field=only_field;
@@ -1484,6 +1766,7 @@ class MLVFilterDialog2{
                "not_contains":"not contains"
             }
         };
+        let height= only_field?120:500
         var self=this;
         this.div = $("<div>").attr("class","mlv-filter-dialog");
         let buttons=[
@@ -1525,6 +1808,7 @@ class MLVFilterDialog2{
             buttons:buttons,
             title:"Filter",
             width:width,
+            height:height,
              position: { my: "center", at: "top" },
             close: ()=>{
                 this.div.dialog("destroy").remove();
@@ -1535,6 +1819,10 @@ class MLVFilterDialog2{
      
       
        this._addFilters(this.data_view.filters);
+       let m = Math.max(this.list1.children().length,this.list2.children().length)*80
+       m=(m>500)?500:m;
+       this.div.height(m);
+       this.div.resizeDialog();
        if (only_field){
            this.div.find("label")[0].style.setProperty( 'margin-left', '0px', 'important' );
            this.div.find("select").css({float:"none","margin-left":"5px"});
@@ -1585,10 +1873,9 @@ class MLVFilterDialog2{
                 }
                 div.append(label).append(operand).appendTo(row);
                 div=$("<div>").append(value).appendTo(row);
-                let poss=[];
-                for (let v in filter.info.values){
-                    poss.push(v);
-                }
+                
+                let poss= this.data_view.groupAndOrder(filter.field)
+              
                 value.autocomplete({
                     source:poss,
                     select:function(event,ui){
@@ -1620,17 +1907,34 @@ class MLVFilterDialog2{
 
 
     _addNumberFilter(li,filter){
-        let min = parseFloat(filter.info.min);
-        let max =parseFloat(filter.info.max);
+        let min_max= this.data_view.getMinMax(filter.field)
+        let min = min_max[0]
+        let max =min_max[1];
         let range = max-min;
         let self=this;
         let s_max = range<5?max:Math.ceil(max);
         let s_min =range<5?min:Math.floor(min);
+
+        let filter_values=filter.value;
+        if (!filter_values){
+            filter_values=[min,max]
+        }
+        else{
+            if (filter.operand===">"){
+                filter_values=[filter.value,max]
+            }
+            else if (filter.operand==="<"){
+                filter_values=[min,filter,value]
+            }
+            else if (filter.operand==="="){
+                filter_values=[filter.value,filter.value]
+            }
+        }
         let slider=  $("<div>").attr("class","mlv-filter-slider").slider({
               range: true,
                min: s_min,
                max: s_max,
-               values: [filter.value[0],filter.value[1]],
+               values: [filter_values[0],filter_values[1]],
                slide: function( event, ui ) {
                    let min1 =$(this).data("min");
                    if (min1<min){
@@ -1671,7 +1975,7 @@ class MLVFilterDialog2{
                 slider.slider("option","values",[v,min_max[1]]);
                 self._filter();
                 
-          }).width(60).val(filter.value[0]);
+          }).width(60).val(filter_values[0]);
 
           let max_input=$("<input type='text'>").on("blur keypress",function(e){
                 let t = $(this);
@@ -1688,7 +1992,7 @@ class MLVFilterDialog2{
                 slider.slider("option","values",[min_max[0],v]);
                 self._filter();
                 
-          }).width(60).val(filter.value[1]);
+          }).width(60).val(filter_values[1]);
 
 
           let label = $("<label>").text(filter.label);
@@ -1713,6 +2017,8 @@ class MLVFilterDialog2{
 
 
     }
+
+
     _filter(){
         let self=this;
         let arr= [this.list1,this.list2];
@@ -1767,166 +2073,19 @@ class MLVFilterDialog2{
        
         
     }
+
+
+
+    
+
+
+
+
+         
 }
 
 
 
-class MLVFilterDialog{
-    constructor(data_view,only_field,callback){
-        this.data_view=data_view;
-        this.only_field=only_field;
-        this.callback=callback;
-        let number_options={
-            ">":"greater than",
-            "<":"less than",
-            "=":"equals",
-            "!=":"not equal",
-            "<>":"between",
-        }
-        this.operand_dict={
-            double:number_options,
-            integer:number_options,
-            "double precision":number_options,
-            text:{
-               "=": "equals",
-               "contains":"contains",
-               "!=":"does not equal",
-               "not_contains":"not contains"
-            }
-        };
-        var self=this;
-        this.div = $("<div>");
-        let buttons=[
-            {
-                text:only_field?"Clear":"Clear All",
-                click:()=>{
-                    this.table.find("input[type=checkbox]").prop("checked",false);
-                    this._filter();
-                    if (this.callback){
-                        this.callback();
-                    }
-                    if (this.only_field){
-                        this.div.dialog("close");
-                    }
-
-                }
-            },
-            {
-                text:"Filter",
-                click:()=>{
-                    this._filter();
-                    if (this.callback){
-                        this.callback();
-                    }
-                    if (this.only_field){
-                        this.div.dialog("close");
-                    }
-
-                }
-            }
-        ];
-        
-        this.div.dialog({
-            autoOpen: true, 
-            buttons:buttons,
-            title:"Filter",
-            width:500,
-            close: ()=>{
-                this.div.dialog("destroy").remove();
-            }
-        });
-      
-       this._addFilters(this.data_view.filters);   
-    }
-
-    _addFilters(filters){
-       this.table = $("<table>").attr("class","mlv-dialog-table");
-        for (let filter of filters){
-            if (this.only_field && filter.field != this.only_field){
-                continue;
-            }
-            let row = $("<tr>").data({field:filter.field,label:filter.label,datatype:filter.datatype});
-            let check = $("<input type='checkbox'>")
-                    .prop("checked",filter.active)
-            let label = $("<label>").text(filter.label)
-            let operand =$("<select>");
-            let operands =this.operand_dict[filter.datatype];
-            for (let name in operands){
-                operand.append($('<option>', {
-                    value: name,
-                    text: operands[name]
-                }));
-            }
-            operand.val(filter.operand)
-            let value = $("<input type='text'>").val(filter.value);
-            
-            $("<td>").append(check).appendTo(row);
-            if (this.only_field){
-                check.prop("checked",true).hide();
-            }
-            
-            
-            $("<td>").append(label).appendTo(row);
-            $("<td>").append(operand).appendTo(row);
-            $("<td>").append(value).appendTo(row);
-            this.table.append(row);
-            this.div.append(this.table);
-        }
-    }
 
 
-    _addNumberFilter(){
-
-
-    }
-    _filter(){
-        let filters=[];
-        this.table.find("tr").each(function(index){
-            let row= $(this);
-            let datatype = row.data("datatype")
-            let filter={
-                field:row.data("field"),
-                label:row.data("label"),
-                active:row.find("input[type=checkbox]").prop("checked"),
-                operand:row.find("select").val(),
-                datatype:datatype
-  
-            };
-            let value = row.find("input[type=text]").val();
-            if (datatype == "text"){
-                filter.value=value;
-            }
-            else {
-                if (datatype == "double"){
-                    filter.value = parseFloat(value);
-                }
-                else{
-                    filter.value = parseInt(value);
-                }
-                if (isNaN(filter.value)){
-                    filter.value="";
-                }
-            }
-            filters.push(filter);
-
-
-        });
-        if (this.only_field){
-            let count=0;
-            for (let item of this.data_view.filters){
-                if (item.field===filters[0].field){
-                    break;
-                }
-                count++;
-            }
-            this.data_view.filters[count]=filters[0];
-        }
-        else{
-            this.data_view.filters=filters;
-        }
-        this.data_view.filterData();
-        
-    }
-}
-
-export {MLVTable,MLVDataView,FilterPanelDataView,ContextMenu,MLVSortDialog,MLVDownloadDialog};
+export {MLVTable,MLVDataView,FilterPanelDataView,ContextMenu,MLVSortDialog,MLVDownloadDialog,MLVFilterDialog};

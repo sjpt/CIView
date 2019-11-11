@@ -64,7 +64,7 @@ class MLVFile{
         this.comment_symbol="#";
     }
     readHeader(callback){
-        let blob = this.file.slice(0,1500);
+        let blob = this.file.slice(0,10000);
         let reader = new FileReader();
         reader.onloadend= (evt)=>{
             if (evt.target.readyState == FileReader.DONE){
@@ -200,14 +200,15 @@ class MLVFileUploadDialog{
             close: ()=>{
                 this.div.dialog("destroy").remove();
             },
+            width:370,
             title:"Upload File"
 	   }).dialogFix();
         this.file_chooser= new MLVFileChooser(function(file){
             self.displayFileInfo(file)
         },config);
         let choose_div = $("<div>").appendTo(this.div);
-        this.name_div = $("<span>").css({"margin-right":"10px"}).text("No File").appendTo(choose_div);
-        let but  = $("<button>").attr({"class":"btn btn-sm btn-secondary","id":"file-choose-button"}).text("Choose").click(function(e){
+        this.name_div = $("<span>").css({"margin-right":"10px","font-size":"16px"}).text("No File Chosen").appendTo(choose_div);
+        let but  = $("<button>").attr({"class":"btn btn-sm btn-secondary","id":"file-choose-button"}).css({float:"right"}).text("Choose").click(function(e){
             self.file_chooser.showOpenDialog();
         }).appendTo(choose_div);
        
@@ -297,7 +298,7 @@ class MLVFileUploadDialog{
 
     _uploadFile(){
         if (this.upload_callback){
-            this.upload_callback(this.file,this.getFields(),this.has_headers);
+            this.upload_callback(this.file,this.getFields(),this.has_headers,this.delimiter);
         }
     }
 
@@ -341,7 +342,12 @@ class MLVFileUploadDialog{
           
             for (let index in c){
                 let c_field= c[index];
-                let f_field=file.fields[index-1]
+                let f_field=file.fields[index-1];
+                if (!f_field){
+                    this.fields_div.append("<p>Not Enough Columns</p>");
+                    error=true;
+                    break;
+                }
                 f_field.name=c_field.label;
                 if (f_field.type !== c_field.datatype){
                     this.fields_div.append("<p>Compulsory field "+c_field.label + " column " + index + " contains the wrong datatype</p>");
@@ -357,6 +363,7 @@ class MLVFileUploadDialog{
         this.headers=file.fields;
         this.has_headers=file.has_headers;
         this.has_header_check.prop("checked",this.has_headers);
+        this.delimiter=file.delimiter;
 
         this.name_div.text(file.file.name);
         let index=1;
@@ -367,6 +374,7 @@ class MLVFileUploadDialog{
         if (!error){
             this.upload_but.attr("disabled",false);
         }
+        $("#file-choose-button").text("Change");
     }
 }
 

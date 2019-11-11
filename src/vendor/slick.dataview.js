@@ -99,6 +99,9 @@ import {Slick} from "./slick.grid.js";
     }
 
     function addFilter(column){
+        if (field_to_filter[column.field]){
+            return;
+        }
         let filter ={
              active:false,
              field:column.field,
@@ -107,12 +110,6 @@ import {Slick} from "./slick.grid.js";
              operand:"=",
              value:""
 
-        }
-        if (column.datatype!=="text"){
-             filter.info={max:Number.MIN_SAFE_INTEGER,min:Number.MAX_SAFE_INTEGER}
-        }
-        else{
-            filter.info={values:{}}
         }
         field_to_filter[column.field]=filter;
         filters.push(filter);
@@ -128,6 +125,9 @@ import {Slick} from "./slick.grid.js";
         }
         else{
             f.active=active;
+        }
+        if (operand===null && value ===null){
+            f.active=false;
         }
         if (operand === "<="){
                 f.operand="between";
@@ -156,12 +156,12 @@ import {Slick} from "./slick.grid.js";
         }
         idxById[id] = i;
       
-      }
-     
-      
-         
-      
-      
+      }  
+    }
+
+
+    function updateFilterValues(field){
+        
     }
 
     function ensureIdUniqueness() {
@@ -171,31 +171,8 @@ import {Slick} from "./slick.grid.js";
         if (id === undefined || idxById[id] !== i) {
           throw new Error("Each data element must implement a unique 'id' property");
         }
-          for (let field in field_to_filter){
-            let value = items[i][field];
-            if (value !== undefined){
-                let filter =field_to_filter[field];
-
-                if (filter.datatype==="text"){
-                    filter.info.values[value]=true
-                }
-                else{
-                    if (value > filter.info.max){
-                        filter.info.max=value;
-                    }
-                    if (value< filter.info.min){
-                        filter.info.min=value;
-                    }
-                }
-            }
-        }
-
+    
       }
-          for (let f of filters){
-              if (f.datatype !== "text"){
-                   f.value=[f.info.min,f.info.max];
-              }
-          }
     }
 
     function getItems() {
@@ -1144,6 +1121,7 @@ import {Slick} from "./slick.grid.js";
       "getPagingInfo": getPagingInfo,
       "getItems": getItems,
       "setItems": setItems,
+      "ensureIdUniqueness":ensureIdUniqueness,
       "setFilter": setFilter,
       "getFilter": getFilter,
       "getFilteredItems": getFilteredItems,

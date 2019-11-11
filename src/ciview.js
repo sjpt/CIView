@@ -22,11 +22,11 @@ class CIView{
 		this.filter_panel = new FilterPanel(config.filter_div,config.data,
 							{
 								menu_bar:true,
-								graphs:config.saved_graphs
+								graphs:config.graphs
 							});
 		this.filter_panel.setColumns(this.columns);
-		this.data_view =  new FilterPanelDataView(null,this.filter_panel);
-		this.image_table =  new MLVImageTable(image_table_div,this.data_view,config.image_base_url);
+		this.data_view =  new FilterPanelDataView(this.filter_panel);
+		this.image_table =  new MLVImageTable(image_table_div,this.data_view,{base_url:config.image_base_url});
 		this.data = config.data;
 		this.base_url = config.image_base_url;
 		if (config.images){
@@ -35,11 +35,7 @@ class CIView{
 		
 
 		let ic =new MLVImageTableControls(this.image_table,this.control_div);
-
 		
-		for (let graph of config.graphs){
-			this.filter_panel.addChart(graph.type,graph.params,graph.name,graph.id,graph.location);		
-		}
 		this.filter_panel.refresh();
 		this.data_view.setItems(config.data);
 

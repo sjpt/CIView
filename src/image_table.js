@@ -1,7 +1,13 @@
+import {ColorByDialog} from "./graphs.js";
+import {MLVFilterDialog,MLVSortDialog} from "./mlv_table.js";
+
 class MLVImageTable {
-    constructor(parent_div,data_view,base_url){
+    constructor(parent_div,data_view,config){
         if (typeof parent_div === "string"){
             parent_div =$("#"+parent_div);
+        }
+        if (!config){
+            config={};
         }
         this.row_first=0;
         this.row_last=139;
@@ -10,17 +16,25 @@ class MLVImageTable {
         let self =this;
         this.display_columns=[];
         this.flipped_tiles={};
+        this.selection_mode=true;
+        this.columns=[];
+        this.sort_columns=[];
 
 
         let im = new Image();
-        im.src=base_url+"1.png";
         im.onload=function(e){
-            self.img_width=im.width;
-            self.img_height=im.height;
-            self.setImageDimensions([im.width,im.height]);
-            self.show();
+            self.preferred_width=self.img_width=im.width;
+            self.preferred_height =self.img_height=im.height;
+            if (config.initial_image_width){
+                self.preferred_width=config.initial_image_width;
+                self.preferred_height=Math.round((self.preferred_width/self.img_width)*self.img_height)
+            }
+            self._resize();
         }
-        this.base_url=base_url;
+        this.base_url=config.base_url;
+       
+     
+      
         this.parent = parent_div;
         this.selected_tiles={};
         this.margin=10;
@@ -28,15 +42,15 @@ class MLVImageTable {
         this.cache_size=5;
 
         this.view_port = $("<div>").height(this.parent.height()).width(this.parent.width())
-                                   .css({"overflow":"auto","display":"none"});
+                                   .css({"overflow":"auto","display":"none"}).attr("id","vpd");
         this.canvas = $("<div>");
         this.data_view = data_view;
         parent_div.append(this.view_port);
-        this.width = this.view_port.width();
+        /*this.width = this.view_port.width();
         this.height = this.view_port.height();
 
         this.num_per_row= Math.floor((this.width-10)/this.tile_width);
-        
+        */
         //work out canvas height
      
         this.canvas.css({"position":"relative","background-color":" LightGray"}).click(function(e){
@@ -50,11 +64,13 @@ class MLVImageTable {
             }
             let arr =id.split("-");
             if (arr[1]==="tile"){
-                let range=null
+                let range=null;
+                let ids =null;
                 let item = self.data_view.getItemById(arr[2]);
                 let index = self.data_view.getRowById(arr[2]);
                 if (e.shiftKey && (self.last_index_clicked || self.last_index_clicked===0)) {
-                    range=[]
+                    range=[];
+                    ids=[];
                     let diff = index-self.last_index_clicked<0?-1:1;
                     let st= self.last_index_clicked+1;
                     let en =index+1;
@@ -63,23 +79,47 @@ class MLVImageTable {
                         en=self.last_index_clicked;
                     }
                     for (let i=st;i<en;i++){
-                        range.push(self.data_view.getItem(i))
+                        let item = self.data_view.getItem(i)
+                        range.push(item);
+                        ids.push(item.id);
                     }
+                    ids.push(self.data_view.getItem(self.last_index_clicked).id)
                     
 
                 }
                 self.listeners.image_clicked.forEach((func)=>{func(e,item,img,range)});
+
                 self.last_index_clicked=index;
+                if (self.tagger && self.tagger.selected_option){
+                    if (! range){
+                        range=[item];
+                    }
+                    self.setTags(range);
+                    return;
+                }
+                if (self.selection_mode){
+                    if (!ids){
+                       ids=[arr[2]]
+                    }
+                    self.setSelectedTiles(ids,false,true);
+                }
+          
             }
             //self.mlv_iv.goToLocation(id);
           
         }).mouseover(function(e){
              let img =$(e.originalEvent.srcElement);
              let id = img.attr("id");
+            
              if (id){
-                 console.log(id);
+                 let item = self.data_view.getItemById(id);
+                 self.listeners.image_over.forEach((func)=>{func(e,item,img)});
              }
 
+        })
+
+       $(document).on("keydown",this.canvas,function(e){
+            self.keyPressed(e);
         });
 
        
@@ -89,8 +129,8 @@ class MLVImageTable {
             self._hasScrolled();
         });
         this.parent.append(this.view_port);
-        let end_row = Math.floor((this.height+(this.cache_size*this.tile_height))/this.tile_height);
-        this.max_difference= end_row+this.cache_size;
+        /*let end_row = Math.floor((this.height+(this.cache_size*this.tile_height))/this.tile_height);
+        this.max_difference= end_row+this.cache_size;*/
         this._addListeners();
         //this.render(0,end_row,true);
         this.resize_timeout=null;
@@ -98,23 +138,222 @@ class MLVImageTable {
 
         this.listeners={
        		"image_clicked":new Map(),
-       		"iamge_over":new Map(),
+       		"image_over":new Map(),
        		"data_changed":new Map(),
-       		"tagging":new Map()
+       		"image_selected":new Map()
        	};
 
-       	this.highlight_colors=null;
+       	this.highlightcolors=null;
 
        	this.tag_color_palletes={};
+       	this.image_suffix = config.image_suffix?config.image_suffix:".png";
+
+       	this.show_info_box=config.show_info_box;
+
+       	this.info_box=$("<div>").attr("class","image-table-info-box")
+       	    .appendTo(this.canvas);
+       	let cbtn = $("<a>X</a>").attr("class","closebtn").click(function(e){
+       	    self.info_box.css("width",0);
+       	    //self.info_box.hide();
+       	}).appendTo(this.info_box);
+       	this.info_box.append("<div class='info-text'></div>");
+
+       	if (!config.base_url){
+            this.url_field=config.url_field;
+            im.src=data_view.getItems()[0][this.url_field]
+        }
+        else{
+            let id = data_view.getItems()[0].id
+            im.src=config.base_url+id+this.image_suffix;
+        }
+
+        this.dv_filter_listener= data_view.addListener("data_filtered",function(e){
+            self.show();
+        });
 
 
 
     }
 
-    setTagColorPallete(field,pallete){
-        this.tag_color_palletes[field]=pallete;
-        this.tag_color_palletes[field]["None"]="";
+    showInfoBox(item){
+        if (this.columns.length===0){
+            return;
+        }
+        let txt = this.info_box.find("div");
+        txt.empty();
+        //txt.scrollTop(0);
+        for (let col of this.columns){
+            txt.append("<span class='info-heading'>"+col.name+"</span>");
+            txt.append("<span>"+item[col.field]+"</span>");
+        }
+        let s_top = (this.view_port.scrollTop()+2)+"px";
+        this.info_box.css({width:200,top:s_top});
+       
     }
+
+    keyPressed(e){
+           if (e.which===39 || e.which===40){
+               if (this.last_index_clicked===this.data_view.getFilteredItems().length-1){
+                   return;
+               }
+               if (this.last_index_clicked || this.last_index_clicked===0){
+                   this.last_index_clicked++;
+                   this.setSelectedTiles([this.data_view.getItem(this.last_index_clicked).id],false,true);
+                     if (this.last_index_clicked>this.getLastTileInView()){
+                        this.show(this.last_index_clicked);
+                   }
+               }
+           }else if(e.which===37 || e.which===38){
+               if (this.last_index_clicked===0){
+                   return;
+               }
+               if (this.last_index_clicked){
+                   this.last_index_clicked--;
+                   this.setSelectedTiles([this.data_view.getItem(this.last_index_clicked).id],false,true)
+                   if (this.last_index_clicked<this.getFirstTileInView()){
+                        this.show(this.last_index_clicked);
+                   }
+               }
+           }
+          
+
+
+    }
+
+    showColorByDialog(div){
+        let self=this;
+        this.color_by_div=div;
+        new ColorByDialog(this.columns,this.data_view.getItems(),div,
+            function (color_by){
+                $("#"+div+"-bar").position({"my":"left top","at":"left top","of":"#"+div})
+				self.setColorBy(color_by);
+				self.show(self.getFirstTileInView());
+			});
+    }
+
+   showFilterDialog(single_field){
+       
+        new MLVFilterDialog(this.data_view,single_field,
+                                ()=>{
+                                    //any thing here?
+                                });
+   }
+
+    showSortDialog(){
+        let cols = {};
+        let self = this;
+        for (let col of this.columns){
+            if (col.sortable){
+                cols[col.id]={name:col.name,field:col.field,datatype:col.datatype};
+            }
+        }
+        new MLVSortDialog(this.data_view,cols,this.sort_columns,
+        function(sort_cols){
+            self.sort_columns=sort_cols
+            self.show();
+        });
+    }
+
+    taggingStarted(tagger){
+        this.tagger=tagger;
+        let self=this;
+        if (this.color_by){
+            this.temp_color_by=this.color_by
+            $("#"+this.color_by_div+"-bar").hide();
+        }
+		this.color_by={
+		    column:{
+		        field:this.tagger.field
+		    },
+		    func:function(d){
+		        return self.tagger.options[d];
+		    }
+		}
+		this.show(this.getFirstTileInView());
+    }
+
+    tagAll(){
+        let items = this.data_view.getFilteredItems();
+        let option = this.tagger.selected_option;
+        if (!option){
+            return;
+        }
+        let field = this.tagger.field
+        if (option==="None"){
+            option=null;
+        }
+        for (let item of items){
+            if (option){
+                item[field]=option
+            }
+            else{
+                delete item[field];
+            }
+        }
+        this.data_view.listeners.data_changed.forEach((func)=>{func(field)});
+        this.show(this.getFirstTileInView());
+    }
+
+    tagSelected(){
+        let items=[];
+        for (let id in this.selected_tiles){
+            items.push(this.data_view.getItemById(id))
+        }
+        this.setTags(items);
+    }
+
+    setTags(items){
+        for (let item of items){
+            let tile = $("#mlv-tile-"+item.id); 
+            tile.removeClass("image-table-selected");
+            if (this.tagger.selected_option==="None"){
+                delete item[this.tagger.field];
+                tile.css("border","");
+            }
+            else{
+                let border = "4px solid "+this.tagger.options[this.tagger.selected_option];
+                item[this.tagger.field]=this.tagger.selected_option;
+                tile.css("border",border);
+            }
+        }
+        let field = this.tagger.field;
+        this.data_view.listeners.data_changed.forEach((func)=>{func(field)});
+    }
+
+    deleteTag(tag){
+        let items = this.data_view.getItems();
+        let field = this.tagger.field;
+        for (let item in items){
+
+            if (item[field]===tag){
+                delete item[field];
+            }
+        }
+
+        this.show(this.getFirstTileInView());
+    }
+
+    updateTags(){
+        this.show(this.getFirstTileInView());
+    }
+
+
+    taggingStopped(){
+        delete this.tagger;
+        if (this.temp_color_by){
+            this.color_by=this.temp_color_by;
+             $("#"+this.color_by_div+"-bar").show();
+             delete this.temp_color_by;
+
+        }
+        else{
+            this.color_by =null;
+        }
+        this.show(this.getFirstTileInView());
+    }
+
+
+   
 
     addListener(type,func,id){
     	let listener = this.listeners[type];
@@ -149,16 +388,41 @@ class MLVImageTable {
     }
 
     setImageWidth(width){
-        this.setImageDimensions([width,Math.round((width/this.t_width)*this.t_height)])
+        this.setImageDimensions([width,Math.round((width/this.img_width)*this.img_height)])
     }
 
 
     
-    setImageDimensions(dim){
+    setImageDimensions(dim,redraw){
+        let ft = this.getFirstTileInView();
+        if (!dim){
+            dim=[this.preferred_width,this.preferred_height];
+        }
+        else{
+            this.preferred_width=dim[0];
+            this.preferred_height=dim[1];
+        }
+        if (this.width < this.preferred_width+(this.margin*2) && this.width !==0){
+           dim[0]=this.width-(this.margin*3);
+           this.num_per_row=1;
+        }
+        else{
+            this.num_per_row= Math.ceil((this.width-this.margin)/(this.preferred_width+this.margin));
+            dim[0] = Math.floor((this.width-2*this.margin)/this.num_per_row)-this.margin;
+
+        }
+        dim[1]=Math.round((dim[0]/this.preferred_width)*this.preferred_height);
+
+       
     	this.tile_width=parseInt(dim[0])+this.margin;
         this.tile_height=parseInt(dim[1])+this.margin;
         this.t_width = parseInt(dim[0]);
         this.t_height = parseInt(dim[1]);
+        let end_row = Math.floor((this.height+(this.cache_size*this.tile_height))/this.tile_height);
+        this.max_difference= end_row+this.cache_size;
+        if (redraw){
+            this.show(ft);
+        }
     }
 
     getInformationTile(item,columns,data){
@@ -236,10 +500,7 @@ class MLVImageTable {
             if (self.view_port.css("display")==="none"){
                 return;
             }
-             self.resize_timeout=setTimeout(()=>{
-            	 
-                self.show();
-            },self.resize_timeout_length);
+            self.resize();
         });
         
 
@@ -248,9 +509,8 @@ class MLVImageTable {
     resize(){
     	let self=this;
     	clearTimeout(this.resize_timeout);
-    	 self.resize_timeout=setTimeout(()=>{
+    	 self.resize_timeout=setTimeout(()=>{	     
     		 self._resize();
-             self.show();
          },self.resize_timeout_length);
     }
 
@@ -261,8 +521,30 @@ class MLVImageTable {
 
     }
 
+    getLastTileInView(){
+        let bottom= this.view_port.scrollTop()+this.view_port.height();
+        return Math.floor(bottom/this.tile_height)*this.num_per_row;
+    }
+
+    setColumns(columns){
+        this.columns=[];
+        for (let column of columns){
+            this.columns.push({field:column.field,datatype:column.datatype,name:column.name,sortable:column.sortable});
+            if (column.filterable){
+                this.data_view.addFilter(column);
+            }
+        }
+        this.data_view.ensureIdUniqueness();
+        
+    }
+
+
+    setColorBy(color_by){
+        this.color_by=color_by;
+    }
+
     _setCanvasHeight(){
-        let h = (Math.ceil(this.data_view.getLength()/this.num_per_row))*this.tile_height;
+        let h = ((Math.ceil(this.data_view.getLength()/this.num_per_row))*this.tile_height)+this.margin;
         this.canvas.height(h);
     }
 
@@ -280,7 +562,7 @@ class MLVImageTable {
                 elapse=50;
             }
         this.scroll_timeout= setTimeout(()=>{
-           
+           this.info_box.css("width","0px")
             if (Math.abs(begin_row-this.row_displayed_first)>this.max_difference){
                  this.render(begin_row,end_row,true);
             }
@@ -300,7 +582,6 @@ class MLVImageTable {
             }
         }
         else if (begin_row===this.row_displayed_first && begin_row!==0){
-            console.log(this.row_displayed_first);
             return;
         }
         else{
@@ -324,9 +605,7 @@ class MLVImageTable {
             }
         }
         
-        for (let id in this.selected_tiles){
-            $("#mlv-tile-"+id).addClass("mlv-tile-selected");
-        }
+     
         /*$(".mlv-tile").bstooltip({
              title:function(){
                  return $(this).attr("id");
@@ -340,20 +619,27 @@ class MLVImageTable {
 
     }
 
-    _resize(){
+    _resize(fti){
+        if (!fti){
+            fti = this.getFirstTileInView();
+        }
         this.width = this.parent.width();
         this.height = this.parent.height();
         this.view_port.height(this.height).width(this.width);
-        if (this.width < this.tile_width+(this.margin*2) && this.width !==0){
-           this.setImageWidth(this.width-(this.margin*2));
-        }
-        this.num_per_row= Math.floor((this.width-10)/this.tile_width);
+        this.setImageDimensions();
+        this.show(fti)
+      
+      
+       
     }
 
     _calculateTopBottomRow(first_tile_index){
+        if (!first_tile_index){
+            first_tile_index=0;
+        }
         let s_top=0;
         if (first_tile_index || first_tile_index===0){
-            s_top=(Math.floor(first_tile_index/(this.num_per_row+1)))*this.tile_height;
+            s_top=(Math.floor(first_tile_index/(this.num_per_row)))*this.tile_height;
         }
         else{
             s_top = this.view_port.scrollTop();
@@ -364,33 +650,31 @@ class MLVImageTable {
         if (begin_row<0){
                 begin_row=0;
         }
+        if (begin_row==0){
+            s_top=0;
+        }
         return ({top:begin_row,bottom:end_row,scroll_top:s_top})    
     }
 
-    clearHighlights(){
-        this.highlight_colors=null;
-        $(".mlv-tile").css("border","none");
 
-    }
 
-    setSelectedTiles(ids,append){
+    setSelectedTiles(ids,append,propagate){
         if (!append){
-            $(".mlv-highlight-tile-div").remove();
+            $(".image-table-selected").removeClass("image-table-selected")
             this.selected_tiles={};
         }
         for (let id of ids){
-            let tile = $("#mlv-tile-"+id);
-            let highlight_div=$("<div>")
-            .css({
-                position:"absolute",
-                top:tile.css("top"),
-                left:tile.css("left")
-            })
-            .attr("class","mlv-highlight-tile-div")
-            .height(tile.height())
-            .width(tile.width());
-            this.canvas.append(highlight_div)
+            let tile = $("#mlv-tile-"+id); 
+            tile.addClass("image-table-selected");
             this.selected_tiles[id]=true;
+        }
+        if (propagate){
+               this.listeners.image_selected.forEach((func)=>{func(ids)});
+        }
+        if (ids.length===1){
+                  if (this.show_info_box){
+                    this.showInfoBox(this.data_view.getItemById(ids[0]));
+                }
         }
         
     }
@@ -411,13 +695,18 @@ class MLVImageTable {
     }
 
 
-    show(first_tile_id){
-        this._resize();
-        this._setCanvasHeight();
-        let obj=this._calculateTopBottomRow(first_tile_id);
+    show(first_tile_index){
+        if (!first_tile_index){
+            first_tile_index=0;
+        }
+        this._setCanvasHeight();  
+        let obj=this._calculateTopBottomRow(first_tile_index);
         this.view_port.show();
-        this.view_port.scrollTop(obj.scroll_top);
+       
+        this.info_box.css("top",obj.scroll_top+"px");
         this.render(obj.top,obj.bottom,true);
+        this.view_port.scrollTop(obj.scroll_top);
+   
     }
     hide(){
         $(".mlv-tile").remove();
@@ -437,18 +726,24 @@ class MLVImageTable {
                 return;
             }
             let border=""
-            if (this.highlight_colors){
-                let val =item[this.highlight_colors['field']];
-                let color = this.highlight_colors.colors[val];
-                if (color){
-                    border= "border:4px solid "+color+";";
-                }
-
+            if (this.color_by){
+                let color = this.color_by.func(item[this.color_by.column.field]);
+                border= "border:4px solid "+color+";";
+            }
+            let extra_classes=""
+            if (this.selected_tiles[item.id]){
+               extra_classes=" image-table-selected";
             }
             let img=null
             if (!item.__info_tile__){
-                let url = this.base_url+item.id+".png";
-                img = $("<img src='"+url+"' style='"+border+"height:"+this.t_height+"px;width:"+this.t_width+"px;position:absolute;box-sizing:border-box;left:"+left+"px"+";top:"+top+"px' class='mlv-tile mlv-tile-row-"+row+"' id='mlv-tile-"+item.id+"'>");
+                let url = "";
+                if (this.base_url){
+                    url = this.base_url+item.id+this.image_suffix;
+                }
+                else{
+                    url = item[this.url_field];
+                }
+                img = $("<img src='"+url+"' style='"+border+"height:"+this.t_height+"px;width:"+this.t_width+"px;position:absolute;box-sizing:border-box;left:"+left+"px"+";top:"+top+"px' class='mlv-tile mlv-tile-row-"+row+extra_classes+"' id='mlv-tile-"+item.id+"'>");
             }
             else{
                 let data={
@@ -508,27 +803,39 @@ class MLVImageTableControls{
 
 
 class TaggingDialog{
-    constructor(app,field,button){
+    constructor(app,field,config){
         let self=this;
         this.field=field;
         this.default_colors=["#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"];
-        this.options=app.tag_color_palletes[field];
-        if (!this.options){
-            this.options={"None":""};
-            app.tag_color_palletes[field]=this.options;
+        this.charcode_to_option={};
+
+       
+
+        this.options={"None":""};
+        if (config.options){
+            for (let o in config.options){
+                this.options[o]=config.options[o];
+            }
         }
+        
 
         let buttons=[{
-            text:"Cancel",
+            text:"Close",
             click:function(e){
                 self.div.dialog("close");
             }
 
         }];
-        if (button){
+        if (config.button){
             buttons.push({
-                text:button.text,
-                click:button.func
+                text:config.button,
+
+                click:function(){
+                    
+                    if (self.action_function){
+                        self.action_function(self.getOptions());
+                    }
+                }
             })
         }
         this.app=app;
@@ -536,51 +843,48 @@ class TaggingDialog{
         this.div.dialog({
             autoOpen: true,      
             close:function(){
-                self.app.removeListener("image_clicked",self.listener);
-                self.app.clearHighlights();
+                $(window).off("keypress.mlvtagging");
                 $(this).dialog('destroy').remove();
-                self.app.listeners.tagging.forEach((func)=>{func(false)});   
+                self.app.taggingStopped(); 
+                if (self.close_function){
+                    self.close_function(self.getOptions());
+                }
             },
             title: "Tagging",
             buttons:buttons,
             width:250
         }).dialogFix();
+        this.lock_options=config.lock_options;
+ 
         this.init();
-        this.app.listeners.tagging.forEach((func)=>{func(true)});      
-        
+        $(window).on("keypress.mlvtagging",function(e){
+           let radio=  self.charcode_to_option[e.keyCode];
+           if (radio){
+               radio.trigger("click");
+               self.app.tagSelected();
+           }
+        })
+    }
+
+    getOptions(){
+        let ret_opt={}
+        for (let o in this.options){
+            if (o==="None"){
+                continue;
+            }
+            ret_opt[o]=this.options[o]
+        }
+        return ret_opt;
     }
 
 
-    imageClicked(event,data,img,range){
-        if (!range){
-            range=[data];
-        }
-        let radio_button=$("input[name='tag-option-radio']:checked");
-        let option = radio_button.val();
-        for (let item of range){
-            let im = $("#mlv-tile-"+item.id);
-            if (option === "None"){
-                im.css("border","none");
-                delete item[this.field];
-            }
-            else{
-                item[this.field]=option;
-                let color = this.app.highlight_colors.colors[option];
-                im.css("border","4px solid "+color);
-            }
-        }
-        
-        this.app.listeners.data_changed.forEach((func)=>{func(this.field,range)});       
-    }
+
 
   
 
      
     init(){
         let self=this;
-        let option_grouo_id= "sc-ra-name-"+this.id;
-        this.option_count=0;
-        this.option_colors= {};
         for (let option in this.options){
             if (option==="None"){
                 continue;
@@ -591,11 +895,11 @@ class TaggingDialog{
 
         let div = this._getOptionDiv("None");
         this.div.append(div);     
-
-        this.div.append("<label>Add Category</label>").css("display","block");
-        let t_div=$("<div>").appendTo(this.div);
-        let input = $("<input>").appendTo(t_div);
-        let but = $("<button>").text("Add")
+        if (!this.lock_options){
+            this.div.append("<label>Add Category</label>").css("display","block");
+            let t_div=$("<div>").appendTo(this.div);
+            let input = $("<input>").appendTo(t_div);
+            let but = $("<button>").text("Add")
             .attr("class","btn btn-sm btn-secondary")
             .css("margin-left","5px")
             .click(function(e){
@@ -608,52 +912,90 @@ class TaggingDialog{
                 input.val("");
                 let div = self._getOptionDiv(option);
                 div.insertBefore("#sc-ra-none-div");
+                $("input[name=tag-option-radio][value='"+option+"']").prop("checked",true)
+                self.selected_option=option;
                 self.div.resizeDialog();
              }).appendTo(t_div);
-
-        this._updateTable();
-       
-        this.listener= this.app.addListener("image_clicked",function(event,data,img,range){
-             self.imageClicked(event,data,img,range)
-        })
-    }
-
-
-    _updateTable(){
-        this.app.highlight_colors={"field":this.field,"colors":this.options};
-        this.app.show();
-    }
-
-    getOptionColors(){
-        let ret={}
-        for (let opt in this.options){
-            if (opt!=="None"){
-                ret[opt]=this.options[opt];
-            }
         }
-        return ret;
+       $("<button>").text("Tag All").attr("class","btn btn-sm btn-secondary")
+            .css("margin-left","5px")
+            .click(function(e){
+                if (!self.selected_option){
+                    return;
+                }
+                self.app.tagAll();
+            }).appendTo(this.div);     
+       this.app.taggingStarted(this);
     }
+
+    setCloseFunction(func){
+        this.close_function=func;
+    }
+    setActionFunction(func){
+        this.action_function=func;
+    }
+
+    close(){
+        this.div.dialog("close");
+    }
+
+
+
 
 
     _getOptionDiv(option){
         let self = this;
-        let checked=(this.option_count===0)
+        let text=option.toLowerCase();
+        let shortcut_key="";
+       
+       
         let div = $("<div>").height(40);
         if (option==="None"){
-            div.attr("id","sc-ra-none-div");
+            div.attr({"id":"sc-ra-none-div","checked":true});
         }
-        div.append($("<input>").attr({type:"radio",value:option,checked:checked,name:"tag-option-radio"}));
-        div.append("<span>"+option+"</span>");
+        else{
+            this.selected_option=option;
+        }
+
+        let radio= $("<input>").data("option",option).attr({type:"radio",value:option,name:"tag-option-radio"})
+            .click(function(e){
+                self.selected_option=$(this).data("option")
+            });
+        div.append(radio);
+        for (let n=0;n<text.length;n++){
+            let charcode= text.charCodeAt(n);
+            if (!this.charcode_to_option[charcode]){
+                this.charcode_to_option[charcode]=radio;
+                shortcut_key = text.charAt(n);
+                break;
+            }
+        }
+        div.append("<span>"+option+" ("+shortcut_key+")"+"</span>");
         if (option !=="None"){
+            if (!this.lock_options){
+               $("<i class='fas fa-trash'></i>").data("option",option)
+                .css({"font-size":"18px",cursor:"pointer",float:"right"})
+                .click(function(e){
+                    let o = $(this).data("option");
+                    delete self.options[o];
+                    if (self.selected_option===o){
+                        self.selected_option=null;
+                    }
+                    div.remove();
+                    self.app.deleteTag(o);
+
+                }).appendTo(div);
+            }
             let color_input=$("<input>").attr({type:"color","class":"tag-option-color"})
                 .css({"display":"inline","width":"40px","float":"right"})
                 .height(30).val(this.options[option]).appendTo(div)
                 .data("option",option)
                 .on("change",function(e){
                     self.options[$(this).data("option")]=$(this).val();
-                    self._updateTable();
+                    self.app.updateTags();
                 });
-            this.option_count++;
+         
+           
         }
        
         return div;

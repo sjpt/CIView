@@ -11779,7 +11779,7 @@ dc.heatMap = function (parent, chartGroup) {
             whiskers = boxWhiskers,
             quartiles = boxQuartiles,
             tickFormat = null,
-
+            pointsToDraw=null,
             // Enhanced attributes
             renderDataPoints = false,
             dataRadius = 3,
@@ -12007,13 +12007,23 @@ dc.heatMap = function (parent, chartGroup) {
 
                 // Update Values
                 if (renderDataPoints) {
+                    if (pointsToDraw){
+                        pointIndices=[0];
+                        d=[pointsToDraw[i]];
+                        dataOpacity=1;
+                        dataRadius=6;
+                        box.style('fill-opacity', 0.3);
+
+                    }
                     var point = g.selectAll('circle.data')
                         .data(pointIndices);
 
                     point.enter().insert('circle', 'text')
                         .attr('class', 'data')
                         .attr('r', dataRadius)
-                        .attr('cx', function () { return Math.floor(Math.random() *
+                        .attr('cx', function () {
+                            var fudge= pointsToDraw?0.5:Math.random();
+                            return Math.floor(fudge *
                             (width * dataWidthPortion) +
                             1 + ((width - (width * dataWidthPortion)) / 2)); })
                         .attr('cy', function (i) { return x0(d[i]); })
@@ -12032,7 +12042,9 @@ dc.heatMap = function (parent, chartGroup) {
                     point.transition()
                         .duration(duration)
                         .delay(delay)
-                        .attr('cx', function () { return Math.floor(Math.random() *
+                        .attr('cx', function () {
+                             var fudge= pointsToDraw?0.5:Math.random();
+                             return Math.floor(fudge *
                             (width * dataWidthPortion) +
                             1 + ((width - (width * dataWidthPortion)) / 2)); })
                         .attr('cy', function (i) { return x1(d[i]); })
@@ -12044,7 +12056,10 @@ dc.heatMap = function (parent, chartGroup) {
                         .attr('cy', 0)
                         .style('opacity', 1e-6)
                         .remove();
+
                 }
+
+
 
                 // Compute the tick format.
                 var format = tickFormat || x1.tickFormat(8);
@@ -12155,11 +12170,12 @@ dc.heatMap = function (parent, chartGroup) {
             return box;
         };
 
-        box.renderDataPoints = function (x) {
+        box.renderDataPoints = function (x,y) {
             if (!arguments.length) {
                 return renderDataPoints;
             }
             renderDataPoints = x;
+            pointsToDraw=y;
             return box;
         };
 
@@ -12289,7 +12305,7 @@ dc.boxPlot = function (parent, chartGroup) {
     var _whiskerIqrFactor = 1.5;
     var _whiskersIqr = DEFAULT_WHISKERS_IQR;
     var _whiskers = _whiskersIqr(_whiskerIqrFactor);
-
+    var _pointsToDraw=null;
     var _box = d3.box();
     var _tickFormat = null;
     var _renderDataPoints = false;
@@ -12398,7 +12414,7 @@ dc.boxPlot = function (parent, chartGroup) {
             .domain(_chart.y().domain())
             .duration(_chart.transitionDuration())
             .tickFormat(_tickFormat)
-            .renderDataPoints(_renderDataPoints)
+            .renderDataPoints(_renderDataPoints,_pointsToDraw)
             .dataOpacity(_dataOpacity)
             .dataWidthPortion(_dataWidthPortion)
             .renderTitle(_chart.renderTitle())
@@ -12557,10 +12573,11 @@ dc.boxPlot = function (parent, chartGroup) {
      * @param {Boolean} [show=false]
      * @returns {Boolean|dc.boxPlot}
      */
-    _chart.renderDataPoints = function (show) {
+    _chart.renderDataPoints = function (show,pts) {
         if (!arguments.length) {
             return _renderDataPoints;
         }
+        _pointsToDraw=pts
         _renderDataPoints = show;
         return _chart;
     };

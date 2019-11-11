@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+ 	<body>
+		<!-- headers -->
+		<h2 style= "display:inline-block;margin-bottom:4px"> Basic Setup </h2>
+		<a href="https://github.com/Hughes-Genome-Group/CIView/blob/master/examples/example1.html">View Source</a>
+		<div style="width:500px;margin-bottom:10px"> Basic Setup</div>
+
+		<!-- The div to hold the panel -->
+   	 	<div id="panel" style="height:300px;width:49%;display:inline-block"> </div>
+		<div id="images" style="height:300px;width:49%;display:inline-block"> </div>
+		<!-- only necessary for browsers which do not support es6-->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.6.15/browser-polyfill.min.js"></script>
+		<!-- contains all the js and css necessary for the browser-->
+   	 	<script src="../dist/ciview.js" ></script>
+
+		<script>
+			function setUp(data){
+				var fp = new FilterPanel("panel",data);
+				var dv = new FilterPanelDataView(fp);
+				var it  = new MLVImageTable("images",dv,{url_field:"image","initial_image_width":100});
+								fp.addChart({
+					type:"bar_chart",
+					param:"overall",
+					Title:"Overall Score"
+				});
+
+				it.setColumns([{
+					field:"overall",
+					name:"Overall",
+					datatype:"integer",
+					filterable:true,
+					sortable:true
+				}])
+				/*dv.sortData([{
+					sortAsc:true,
+					sortCol:{
+						datatype:"integer",
+						field:"overall"
+					}
+
+				}]);
+				*/
+				it.showSortDialog();
+				
+				it.showFilterDialog();
+				
+				/*setTimeout(function(){
+				dv.setFilterInfo("overall","=",90)
+				dv.filterData();
+				},1000);
+                */
+			}
+
+
+
+
+
+			$.ajax({
+				dataType:"json",
+				url:"data/fifa_all.json"
+			}).done(setUp);
+		</script>
+ 	 </body>
+</html>

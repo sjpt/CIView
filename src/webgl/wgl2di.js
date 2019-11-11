@@ -520,6 +520,25 @@ class WGL2DI{
 
 	}
 
+	setLogPosition(axis,bool){
+		let i=0
+		if (axis ==="y"){
+			i=1;
+		}
+		for (let obj of this.objects){
+			let obj_type=this.object_types[obj[1]];
+			let arr =  obj_type.data.position[obj[0]];
+			let m=arr[i]<0?-1:1;
+			if (bool){
+
+				arr[i]= Math.log10(Math.abs(arr[i]))*m;
+			}
+			else{
+				arr[i]=Math.pow(10,Math.abs(arr[i]))*m;
+			}
+		}
+	}
+
 
 
 
@@ -1642,6 +1661,7 @@ class WGL2DI{
 				op=opacity;\n\
 				s_angle=start_angle;\n\
 				e_angle = end_angle;\n\
+				vec2 x1= log(position);\n\
 				vec2 real_position = normalizeCoords(position);\n\
 				gl_Position = vec4(real_position, 0.0, 1.0);\n\
 			}\n'

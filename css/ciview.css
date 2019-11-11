@@ -2,11 +2,71 @@
     box-sizing: border-box;
 }
 
+
+.image-table-selected {
+	border: 6px solid yellow !important;
+}
+
+
+
+.image-table-info-box {
+  height: 200px;
+  width: 0;
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  background-color:lightgrey;
+  overflow-x: hidden;
+  transition: 0.5s;
+  padding-top: 12px;
+  border: solid 1px gray;
+}
+
+.image-table-info-box .closebtn {
+  position: absolute;
+  top: 3px;
+  right: 25px;
+  font-size: 12px;
+  margin-left: 50px;
+}
+
+.info-text .info-heading {
+	margin:3px;
+	padding:2px;
+	background-color:white;
+}
+
+.image-table-info-box .info-text {
+	display:flex;
+	flex-direction:column;
+	height:100%;
+	overflow-y:auto;
+
+
+}
+
+.info-text::-webkit-scrollbar {
+    width: 5px;
+}
+
+.info-text::-webkit-scrollbar-thumb {
+    background: #E0E0E0;
+}
+
+
+
 .grid-stack-item-content {
   background: white;
   color: #2c3e50;
   right:5px !important;
   left:5px !important;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: -moz-none;
+  -o-user-select: none;
+  user-select: none;
+
 }
 
 
@@ -100,9 +160,27 @@
 	margin-right:2px;
 }
 
-.civ-chart-dialog,.add-chart-dialog,.tagging-dialog  label {
+.civ-chart-dialog label {
 	font-weight:bold;
-	margin-bottom:2px;
+	margin-bottom: 1px;
+	margin-top: 3px;
+	display: block;
+}
+
+.civ-chart-dialog hr {
+	margin-top:0.5rem;
+	margin-bottom:0.5rem
+}
+
+.add-chart-dialog label{
+	font-weight:bold;
+	margin-bottom: 1px;
+	margin-top:3px;
+}
+
+.tagging-dialog label{
+	font-weight:bold;
+	margin-bottom: 1px;
 	margin-top:3px;
 }
 
