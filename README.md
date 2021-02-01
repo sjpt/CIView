@@ -9,7 +9,7 @@ CiView is a way of looking a multi-variate data and quickly visualizing the effe
 
 ## Quick Start
 
-Just copy dist/ciview.js and put the  dist/images directory in the same directory as your html page. Then just import mlv_panel.js in
+Just copy dist/ciview.js and put the  dist/images directory in the same directory as your html page. Then just import ciview.js in
 a <script> tag - see [example1](examples/example1.html). Older browsers may also require polyfills.
 
 
