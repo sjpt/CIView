@@ -30,9 +30,12 @@ class MLVFileChooser{
         this.fileInput.trigger("click");
     }
     destroy(){
-        this.file_input.remove();
+        this.fileinput.remove();
     }
 }
+
+
+
 
 function mlvUploadFile(file,url,data,callback){
     let xhr = new XMLHttpRequest();
@@ -49,6 +52,7 @@ function mlvUploadFile(file,url,data,callback){
     fd.append("data",JSON.stringify(data));
     xhr.send(fd);   
 }
+
 
 
 class MLVFile{
@@ -84,6 +88,14 @@ class MLVFile{
             }
         };
         reader.readAsBinaryString(blob) 
+    }
+
+    readAsText(callback){
+        let reader =new FileReader();
+        reader.onload=function(){
+            callback(reader.result.split(/\r?\n/));
+        }
+        reader.readAsText(this.file);
     }
 
     getHeaders(lines,callback){
@@ -190,6 +202,80 @@ function replaceAll(str,rep){
     return str;
 }
 
+
+class SparseMatrixUploadDialog{
+    constructor(callback,div){
+        let self = this;
+        this.callback=callback;
+
+        if (!div){
+            this.div = $("<div>").dialog({
+            close: ()=>{
+                this.div.dialog("destroy").remove();
+            },
+            width:370,
+            title:"Upload File"
+	        }).dialogFix();
+        }
+        else{
+            this.div=div;
+        }
+        this.file_chooser= new MLVFileChooser(function(file){
+            self.processFile(file)
+        });
+
+        this.addSection("columns","Choose Columns");
+        this.addSection("rows","Choose Rows");
+        this.addSection("file","Choose Matrix")
+ 
+
+    }
+
+    addSection(type,text){
+        let self=this;
+       let div = $("<div>").css({"margin-right":"10px","font-size":"14px","height":"40px"}).text(text).appendTo(this.div);
+       $("<button>").attr({"class":"btn btn-sm btn-secondary"}).css({float:"right","padding":"3px","font-size":"12px"}).text("Choose").click(function(e){
+           self.current_type=type;
+            self.file_chooser.showOpenDialog();
+        }).appendTo(div);
+        this[type+"_info_div"]=div;
+
+    }
+
+   
+    isReady(){
+        if (this.rows && this.columns && this.file){
+            this.callback({
+                rows:this.rows,
+                columns:this.columns,
+                file:this.file
+            })
+        }
+    }
+
+    processFile(file){
+        let self = this;
+        let type = this.current_type
+        if (type==="rows" || type==="columns"){
+            file.readAsText(function(data){
+                self[type]=data;
+                let info = data[0]+",..("+data.length+")";
+                self[type+"_info_div"].append("<br><span style='font-size:12px'>"+info+"<span>");
+                self.isReady();
+            });
+        }
+        else{
+            this.file=file;
+             self[type+"_info_div"].append("<br><span style='font-size:12px'>"+file.file.name+"<span>");
+            this.isReady();
+
+        }
+
+    }
+
+
+}
+
 class MLVFileUploadDialog{
     constructor(config){
         if (!config){
@@ -267,6 +353,11 @@ class MLVFileUploadDialog{
             let span = $("<span>").text(n+".").width(20).css("display","inline-block");
             div.append(span);
             let name = this.has_headers?field.name:"Enter Column Name ("+field.name+")";
+            if (this.config.compulsory_fields && this.config.compulsory_fields[n]){
+                if (this.config.compulsory_fields[n].datatype==="text"){
+                    field.type="text";
+                }
+            }
             if (this.config.compulsory_fields && this.config.compulsory_fields[n]){
                 name=field.name;
             }
@@ -349,7 +440,7 @@ class MLVFileUploadDialog{
                     break;
                 }
                 f_field.name=c_field.label;
-                if (f_field.type !== c_field.datatype){
+                if (c_field.datatype!=="text" && (f_field.type !== c_field.datatype)){
                     this.fields_div.append("<p>Compulsory field "+c_field.label + " column " + index + " contains the wrong datatype</p>");
                     f_field.error=true;
                     error=true;
@@ -378,4 +469,4 @@ class MLVFileUploadDialog{
     }
 }
 
-export {MLVFileChooser,MLVFileUploadDialog,mlvUploadFile};
+export {MLVFileChooser,MLVFileUploadDialog,mlvUploadFile,SparseMatrixUploadDialog};

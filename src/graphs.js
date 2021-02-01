@@ -6,11 +6,11 @@ import "./vendor/gridstack.js";
 
 
 
-
 class FilterPanel{
       /**
      * Creates a filter panel
-     * @param {string|Object} div - The id of the div element or the jquery element itself that will house the panel
+     * @param {string|Object} div - The id of the div element or the jquery element itself that will house the panel or  a list of ids 
+     * to elemments
      * @param {object[]} data - The actual data, consisting  of an array of objects containg key/values
      * @param {object} config -Can have the following keys:-
      * <ul>
@@ -23,50 +23,82 @@ class FilterPanel{
         let self=this;
         this.id = this._getRandomString(6,"A");
         this.columns=[];
-        let holder=null;
+        this.divs={};
+        this.gridstacks={};
+        this.menu_divs={};
+        this.column_index={};
         if (!config){
         	config={};
         }
-        if (typeof div === "string"){
-        	div=$("#"+div)
+        let divs={};
+        if (Array.isArray(div)){
+        	for (let d of div){
+                divs[d]=$("#"+d);
+        	}
         }
-        if (config.menu_bar){
-        	let container = div;
-        	this.menu_div=$("<div>").attr("class","civ-menu-bar").appendTo(container);
-        	holder = $("<div>").attr("class","civ-main-panel").appendTo(container);
-        	this._setUpMenu();
+        else if (typeof div === "string"){
+        	divs["_default"]=$("#"+div)
         }
         else{
-        	holder=div;
+        	divs["_default"]=div;
         }
-        //create the gridstack
-        holder.addClass("civ-filter-panel");
-        this.div=$("<div>").appendTo(holder);
-        this.div.addClass("grid-stack");
-        this.div.on('mousewheel DOMMouseScroll', function (e) { return false; });
-        this.div.gridstack(
-            {
-                width:12,
-                verticalMargin:10,
-                cellHeight:40,
-                minWidth:600,
-                draggable: {
-                    handle: '.mlv-chart-label',
-                }
+
+        for (let d_name in divs){
+        	let div = divs[d_name];
+        	let holder=null;
+        	if (config.menu_bar){
+        	    let container = div;
+        	    this.menu_divs[d_name]=$("<div>").attr("class","civ-menu-bar").appendTo(container);
+        	    holder = $("<div>").attr("class","civ-main-panel").appendTo(container);
+        	    if (d_name==="_default"){
+        	        this._setUpMenu(d_name);
+        	    }
             }
-        )
-        this.div.on("resizefinished",function(event, ui) {
-            let ch= ui.originalElement.data("chart");
-            ch.setSize();
-        });
-        this.gridstack=this.div.data("gridstack");
+            else{
+        	    holder=div;
+            }
+            holder.addClass("civ-filter-panel");
+            this.divs[d_name]=$("<div>").appendTo(holder);
+            this.divs[d_name].addClass("grid-stack");
+            this.divs[d_name].on('mousewheel DOMMouseScroll', function (e) { return false; });
+            this.divs[d_name].gridstack({
+                    width:12,
+                    verticalMargin:10,
+                    cellHeight:40,
+                    minWidth:600,
+                    draggable: {
+                    handle: '.mlv-chart-label',
+               }
+            })
+            this.divs[d_name].on("resizefinished",function(event, ui) {
+                let ch= ui.originalElement.data("chart");
+                ch.setSize();
+            });
+            
+            this.gridstacks[d_name]=this.divs[d_name].data("gridstack");
 
 
-        this.extra_divs={};
+
+
+        }
+       
+        
+      
+       
+
+   
+        let count=1;
+        for (let item of data){
+        	if (item.id === undefined){
+        		item.id=count++;
+        	}
+        }
         this.ndx= crossfilter(data);
         this.filtered_ids;
         this.charts={};
         this.listeners = {};
+        this.remove_listeners={};
+        this.add_listeners={};
         this.param_to_graph={};
         $(window).on("resize."+this.id,function(e){
             if (!e.originalEvent){
@@ -81,12 +113,17 @@ class FilterPanel{
         this.custom_filter_functions={};
         this.filtered_items_length=0;
 
+        if (config.columns){
+        	this.setColumns(config.columns)
+        }
+
         if (config.graphs){
         	for (let graph of config.graphs){
-        		this.addChart(graph);
+        		this.addChart(graph,true);
         	}
         }
-        this.config=config;
+        this.config={};
+        this.config.exclude_graph_types=config.exclude_graph_types;
 
     }
 
@@ -97,10 +134,14 @@ class FilterPanel{
     */
     dispose(){
     	$(window).off("rezise."+this.id);
-    	this.div.empty();
+    	for (let d in this.divs){
+    		this.divs[d].empty();
+    	}
+    	
     }
 
-    _setUpMenu(){
+    _setUpMenu(name){
+    	let m_div=this.menu_divs[name];
     	let self =this;
     	$("<button>").html("<i class= 'fas fa-chart-bar'></i>Add Chart").attr("class","btn btn-sm btn-secondary")
     		.click(function(e){
@@ -108,11 +149,11 @@ class FilterPanel{
     					config.location={x:0,y:0,height:3,width:3};
     					self.addChart(config);
     			},self.config);
-    		}).appendTo(this.menu_div);
+    		}).appendTo(m_div);
     	$("<button>").html("<i class= 'fas fa-sync-alt'></i>Reset All").attr("class","btn btn-sm btn-secondary")
     		.click(function(e){
     			self.resetAll();
-    		}).appendTo(this.menu_div);
+    		}).appendTo(m_div);
     }
     
 
@@ -137,14 +178,21 @@ class FilterPanel{
 
     setColumns(columns){
     	this.columns=[];
+    	this.column_index={};
     	if (typeof columns === 'object'){
         	for (let col in columns){
             	this.columns.push(columns[col]);
+            	this.column_index[columns[col].field]=columns[col];
         	}
     	}
     	else{
     		for (let col of columns){
-    			this.columns.push(col);
+    			let c = {field:col.field,name:col.name,datatype:col.datatype};
+    			if (c.columnGroup){
+    				col.columnGroup=c.columnGroup;
+    			}
+    			this.columns.push(c);
+    			this.column_index[c.field]=c;
     		}
     	}
     	if (columns.length<1){
@@ -169,19 +217,19 @@ class FilterPanel{
     }
 
 
-    removeField(field){
+    removeField(field,not_propagate){
     	for (let ch in this.charts){
     		let chart = this.charts[ch];
     		let p  = chart.config.param;
     		if (typeof p === "string"){
     			if (p===field){
-    				this.removeChart(ch)
+    				this.removeChart(ch,not_propagate)
     				continue;
     			}
     		}
     		else{
     			if (p.indexOf(field) !==-1){
-    				this.removeChart();
+    				this.removeChart(ch,not_propagate);
     				continue;
     			}
     		}
@@ -239,8 +287,17 @@ class FilterPanel{
     
     }
 
-    addMenuIcon(icon){
-    	this.menu_div.append(icon);
+    addMenuIcon(icon,div){
+    	if (!div){
+    		div="_default";
+    	}
+    	this.menu_divs[div].append(icon);
+    }
+
+    highlightDataItem(key){
+    	for (let id in this.charts){
+    		this.charts[id].highlightDataItem(key);
+    	}
     }
 
 
@@ -290,15 +347,15 @@ class FilterPanel{
     * @param {boolean} [not_propagate] - If true the the listener will not be callled 
     */ 
     removeCustomFilter(id,not_propagate){
-        let dim = this.filters[id];
+        let dim = this.custom_filters[id];
 		if (!dim){
 			return false;
 		}
 		dim.filter(null)
 		dc.redrawAll();
-		this._chartFiltered(dim.top(1000000),null,not_propagate);
+		this._chartFiltered(dim.getIds(),null,not_propagate);
 		dim.remove();
-		delete this.filters[id];
+		delete this.custom_filters[id];
     }
 
 
@@ -316,7 +373,7 @@ class FilterPanel{
     * </ul>
     * Other parameters specific to the chart type are also given in the config
     */
-    addChart(config){
+    addChart(config,not_propagate){
     	config=$.extend(true,{},config)
         let self = this;
         //html friendly id 
@@ -345,20 +402,22 @@ class FilterPanel{
         //create divs and add to the gridstack
         let div=$("<div>").attr("class","grid-stack-item");
         let content = $("<div>").attr({"class":"grid-stack-item-content","id":div_id}).appendTo(div);
-        this.gridstack.addWidget(div,loc.x,loc.y,loc.width,loc.height,autoplace);
-		
+        let d_name =  config.div_name?config.div_name:"_default";
+        this.gridstacks[d_name].addWidget(div,loc.x,loc.y,loc.width,loc.height,autoplace);
+        
+ 
 		//create the actual chart
         let ch = MLVChart.chart_types[config.type];
         if (!ch){
         	throw (`chart type ${config.type} not recognised`);
         }
         let type = config.type;
-        delete config.type;
+        //delete config.type;
 
        
 
        
-        let chart = new ch["class"](this.ndx,div_id,config);
+        let chart = new ch["class"](this.ndx,div_id,config,this.columns);
         this.charts[id]=chart;
         div.data("chart",chart);
         div.data("id",id);
@@ -373,9 +432,12 @@ class FilterPanel{
 
         }
         else if  (typeof(chart.param) !=="string"){
-            for (let param of chart.config.param){
-                this.param_to_graph[param]=chart;
-            }
+        	if (Array.isArray(chart.config.param)){
+                for (let param of chart.config.param){
+                    this.param_to_graph[param]=chart;
+                }		
+        	}
+          
         }
         else{
             this.param_to_graph[chart.config.param]=chart;
@@ -393,7 +455,20 @@ class FilterPanel{
                 	},col_options.datatype,chart.config.color_by)
                 });
             chart.addMenuIcon(color_by);	
-		} 
+		}
+
+		let download_image = $("<i class='fas fa-image'></i>").css({"margin-left":"auto","margin-right":"3px"})
+            .click(()=>{
+                chart.downloadImage();
+              
+            });
+        chart.addMenuIcon(download_image);
+        let pin_icon = $("<i class='fas fa-thumbtack'></i>").css({"margin-left":"auto","margin-right":"3px"})
+            .click(()=>{
+                self.pinChart(chart);
+              
+            });
+        chart.addMenuIcon(pin_icon);
 
       
 
@@ -407,10 +482,46 @@ class FilterPanel{
         //Add exisiting filter to chart
         if (this.filtered_ids && (this.filtered_items_length !== this.ndx.getOriginalData().length)){
             if (chart._hide){
-                chart._hide(this.filtered_ids);
+                chart._hide(this.filtered_ids,this.filtered_items_length);
             }
         }
+        if (config.static){
+        	this.pinChart(chart);
+        }
+        if (!not_propagate){
+			let g_info= this._getChartInfo(type,config.param);
+			for (let id in this.add_listeners){
+				this.add_listeners[id](config,g_info)
+		    }
+        }
         return id;
+      
+       
+       
+    }
+
+
+    _getChartInfo(type,param){
+    	let g_info={
+				type:MLVChart.chart_types[type].name,
+				fields:[]
+			}
+			let p1 =param;
+			if (!Array.isArray(param)){
+				p1=[param];
+			}
+			if (param){
+				for (let p of p1){
+					if (this.column_index[p]){
+					    g_info.fields.push(this.column_index[p].name);
+					}
+					else{
+						 g_info.fields.push(p);
+					}
+				}
+			}
+		return g_info;
+
     }
 
     /**
@@ -419,72 +530,214 @@ class FilterPanel{
     * @param {integer} id - The id of the graph to remove
     * @returns{boolean} true if the chart was successfully removed, otherwise false
     */
-    removeChart(id){
+    removeChart(id,not_propagate){
         let chart = this.charts[id];
         if (!chart){
             return false;
         }
         let parent_div=chart.div.parent();
         let left = chart.remove();
-        this.gridstack.removeWidget(parent_div);
+        let d_name = chart.config.div_name?chart.config.div_name:"_default";
+        this.gridstacks[d_name].removeWidget(parent_div);
+        let g_info= this._getChartInfo(chart.type,chart.config.param);
+	   delete this.charts[id];
+        if (!not_propagate){
+			for (let id in this.remove_listeners){
+			   this.remove_listeners[id](chart.config,g_info);
+			}
+        }	
+
+        
         if (left){
             dc.redrawAll();
             this._chartFiltered(left);
         }
-        delete this.charts[id];
+        
         return true;
+    }
+
+
+    addStaticCharts(charts){
+    	this.static_charts=charts
+    	this.addStaticChart(0);
+    }
+
+    addStaticChart(index){
+    	let self =this;
+    	if (index ===this.static_charts.length){
+    		return;
+    	}
+    	let ch = this.static_charts[index];
+    	let id = this.addChart(ch);
+    	setTimeout(()=>{
+    		self.pinChart(self.charts[id],index);
+    	},150)
+    	
+    }
+
+    unpinChart(chart){
+    	let self = this;
+    	let loc= null
+    	let dn = chart.config.div_name?chart.config.div_name:"_default";
+    	for (let node of this.gridstacks[dn].grid.nodes){
+    		if  (node.el.data("chart")===chart){
+    		    loc = {
+					x:node.x,
+					y:node.y,
+					height:node.height,
+					width:node.width
+    		    }
+    		    break;
+
+    		}
+
+    	}
+    	let o_config = chart.config._original_config;
+    	delete o_config.size;
+    	o_config.location= loc
+    	this.removeChart(chart.config.id,true);
+
+    	this.addChart(o_config);
+
+    }
+
+
+    pinChart(chart,index){
+    	if (chart.type==="single_image_chart"){
+    		this.unpinChart(chart);
+    		return;
+    	}
+    	let self = this;
+    	let loc= null;
+    	let dn = chart.config.div_name?chart.config.div_name:"_default";
+    	for (let node of this.gridstacks[dn].grid.nodes){
+    		if  (node.el.data("chart")===chart){
+    		    loc = {
+					x:node.x,
+					y:node.y,
+					height:node.height,
+					width:node.width
+    		    }
+    		    break;
+
+    		}
+    	
+
+    	}
+    	chart.getCanvas(function(canvas){
+    		let id  = chart.config.id;
+    		let title = chart.config.title;
+    	    let orig_config= chart.config;
+    	    orig_config.type=chart.type;
+            self.removeChart(id,true);
+    		self.addChart({
+    			type:"single_image_chart",
+    			param:canvas.toDataURL('image/png'),
+    			location:loc,
+    			id:id,
+    			title:title,
+    			_original_config:orig_config
+
+    		});
+    		self.charts[id].ti.css("background-color","lightgray");
+    		if (index !== undefined){
+    			self.addStaticChart(index+1);
+    		}
+    		
+    	})
     }
 
 	/**
     * Clears filters from all the graphs in the panel 
     */
     resetAll(){
-    	this.ignore_filter=true;
+    	this._chart_is_filtering=true;
     	for (let name in this.charts){
     		let chart = this.charts[name];
     		if (chart.removeFilter){
     			chart.removeFilter();
+    		}
+    		if (chart.centerGraph){
+    			chart.centerGraph();
     		}	
     	}
     	dc.filterAll();
-    	this.ignore_filter=false;
-    	this.filterChanged();
+        dc.redrawAll();
+        this._chart_is_filtering=false;
+        let dim=null
+        for (let gn in this.charts){
+            dim = this.charts[gn].dim;
+            if (dim){
+            	break;
+            }         
+       
+        }
+        dc.redrawAll();
+        if (dim){
+            let items =dim.getIds();
+            this._chartFiltered(items);
+        }
+
+    	
+    
+    	for (let id in this.listeners){
+         		this.listeners[id](this.filtered_ids,this.filtered_items_length);
+         	}
     }
+
+
 
     setChartField(chart_id,field){
         this.charts[chart_id].setField(field)
     }
 
-
-    filterChanged(){
+     filterChanged(){
         //get rendom graph
-        let chart=null
+        let dim=null
         for (let gn in this.charts){
-            chart =this.charts[gn];
-            break;
+            dim = this.charts[gn].dim;
+            if (dim){
+            	break;
+            }         
+       
         }
         dc.redrawAll();
-        if (chart){
-            let items = chart.dim.getIds();
+        if (dim){
+            let items =dim.getIds();
             this._chartFiltered(items);
         }
     }
+
+    updateDCCharts(){
+    	dc.redrawAll();
+    }
+
+
+
  
 
     _chartFiltered(info,chart_exclude,not_propogate){
-    	if (this.ignore_filter){
+    	let self =this;
+    	if (this._chart_is_filtering){
     		return;
     	}
+    	console.log(chart_exclude);
+    	this._chart_is_filtering=true;
+    	setTimeout(function(e){
+    		self._chart_is_filtering=false;
+    	},100) ;  
+    	this.filtered_ids=info.items;
+    	this.filtered_items_length=info.count;
     	
         for (let name in this.charts){
             let chart = this.charts[name];
             if (chart._hide){
-                if (name == chart_exclude){
-                    chart._filter(info.items);
+                if (name === chart_exclude){
+                    //chart._filter(info.items);
 
                 }
                 else{
-                    chart._hide(info.items);
+                    chart._hide(info.items,info.count);
                 }
             }
          }
@@ -511,6 +764,22 @@ class FilterPanel{
         return id;
     }
 
+    addRemoveListener(func,id){
+    	if (!id){
+    		id=this._getRandomString(6)
+    	}
+    	this.remove_listeners[id]=func;
+    	return id;
+    }
+
+    addAddListener(func,id){
+    	if (!id){
+    		id=this._getRandomString(6)
+    	}
+    	this.add_listeners[id]=func;
+    	return id;
+    }
+
     removeListener(id){
     	delete this.listeners[id];
     }
@@ -522,23 +791,35 @@ class FilterPanel{
 
     getGraphs(){
     	let all_graphs=[];
-    	for (let node of this.gridstack.grid.nodes){
-    		let location = {
-    			x:node.x,
-    			y:node.y,
-    			height:node.height,
-    			width:node.width
-    		}
-    		let chart = node.el.data("chart");
-    		let config= chart.getConfig();
-    		config["type"]=chart.type;
-    		config["location"]=location;
-    		delete config["size"];
-    		delete config["view"];
-    		all_graphs.push(config);
+    	for (let d_name in this.gridstacks){
+			for (let node of this.gridstacks[d_name].grid.nodes){
+				let location = {
+					x:node.x,
+					y:node.y,
+					height:node.height,
+					width:node.width
+				}
+				let chart = node.el.data("chart");
+				let config= chart.getConfig();
+				config["type"]=chart.type;
+				config["location"]=location;
+				delete config["size"];
+				delete config["view"];
+				all_graphs.push(config);
 
+			}
     	}
     	return all_graphs;
+    }
+
+    getChartLocation(id){
+    	let l = this.charts[id].div.parent()[0].dataset;
+    	return{
+    		x:l.gsX,
+    		y:l.gsY,
+    		width:l.gsWidth,
+    		height:l.gsHeight
+    	}
     }
 
 
@@ -603,15 +884,22 @@ class MLVChart{
         }
         let title = config.title
         if (!title){
-			if ( typeof config.param === "string"){
-				title=config.param;
-			}
-			else{
-				title = config.param[0]+" X "+config.param[1];
-			}
+        	if (config.param){
+				if ( typeof config.param === "string"){
+					title=config.param;
+				}
+				else{
+					title = config.param[0]+" X "+config.param[1];
+				}
+				this.config.title=title;
+        	}
+        	else{
+        		this.config.title=title= "Chart";
+        	}
         }
         this.div=div.css({"display":"inline-block"});
-        this.ti=$("<div>").text(title).appendTo(this.div).css({"display":"flex","white-space":"nowrap"})
+      
+        this.ti=$("<div>").appendTo(this.div).css({"display":"flex","white-space":"nowrap"})
             .attr("class","mlv-chart-label")
             .on("mouseover",function(e){
                 $(this).find('.mlv-chart-option-menu').show();
@@ -622,8 +910,12 @@ class MLVChart{
             .on("mouseout",function(e){
                 $(this).find('.mlv-chart-option-menu').hide();
             });
- 
- 
+
+       
+        this.title_span =$("<span>").text(title).css({"text-overflow":"ellipsis","overflow":"hidden"}).appendTo(this.ti);
+        if (config.title_color){
+        	this.ti.css("background-color",config.title_color);
+        }
         this.reset_but = $("<button>").text("reset")
             .attr("class","pull-right reset btn btn-sm btn-primary mlv-reset-btn")
             .css({"visibility":"hidden"})
@@ -649,6 +941,43 @@ class MLVChart{
         this.ti.find(".mlv-chart-option-menu").append(icon);
 
     }
+
+    setColorFromConfig(){
+		let cb = this.config.color_by;
+		let params =null;
+		if (cb){
+			let opt = this.getColorOptions();
+			params = FilterPanel.getColorScale(cb.column,this.ndx.all(),cb.scheme,opt.div);
+			
+		}
+		this.colorByField(params);
+	}
+
+
+	colorByField(params){
+		if (!params){
+			delete this.config.color_by;
+			let div = this.getColorOptions().div;
+			$("#"+div+"-bar").remove();
+		}
+		else{
+			this.config.color_by={
+    			column:params.column,
+    			scheme:params.scheme,
+    		}
+		}
+	}
+
+    
+
+    addTitleControl(control){
+    	this.ti.append(control);
+    }
+
+    highlightDataItem(){}
+
+    
+    remove(){}
 
     setUpdateListener(func){
         this.updateListener=func;
@@ -694,34 +1023,7 @@ class MLVChart{
     getColorOptions(){
     	return null;
     }
-
-}
-
-
-
-
-class MLVDCChart extends MLVChart{
-	constructor(ndx,chart_type,div,config){
-    	super(ndx,div,config);
-        let self=this;
-        this.chart=chart_type("#"+div);
-        this.chart.on("filtered",function(){
-        	if (self.not_broadcast){
-            	self.not_broadcast=false;
-            }
-            else{
-            	self.updateListener(self.dim.getIds());
-            }
-     	});       
-        this.chart.controlsUseVisibility(true);
-        this.reset_but.click(function(e){
-        	self.chart.filterAll();
-        	dc.redrawAll();
-        });
-    }
-    
-
-    /**
+      /**
     * Sets the size of the graph. If no parameters are supplied
     * then the graph will be resized based on it container. 
     * @param {integer} x - The new width 
@@ -739,6 +1041,64 @@ class MLVDCChart extends MLVChart{
         this.config.size=[x,y];
         this.height=y-this.ti.height()+10;
         this.width=x;
+       
+    }
+
+    downloadImage(){
+    	let self = this;
+    	this.getCanvas(function(canvas){
+    		let link =document.createElement("a");
+    	    let url =canvas.toDataURL('image/png');
+    	    url = url.replace(/^data:image\/png/,'data:application/octet-stream');
+			link.href=url
+			link.download=self.config.title+".png"
+			link.click();
+			$(link).remove();
+
+    	})
+    	   
+
+
+    }
+
+    setTitle(title){
+    	 this.title_span.text(title);
+    	 this.config.title=title;
+
+    }
+
+
+}
+
+
+
+
+
+class MLVDCChart extends MLVChart{
+	constructor(ndx,chart_type,div,config){
+    	super(ndx,div,config);
+        let self=this;
+        this.chart=chart_type("#"+div);
+        this.chart.on("filtered",function(){
+        
+        	if (self.not_broadcast){
+            	self.not_broadcast=false;
+            }
+            else{
+            	self.updateListener(self.dim.getIds());
+            }
+     	});       
+        this.chart.controlsUseVisibility(true);
+        this.reset_but.click(function(e){
+        	self.chart.filterAll();
+        	dc.redrawAll();
+        });
+    }
+    
+
+
+    setSize(x,y){
+        super.setSize(x,y);
         this.chart.width(this.width).height(this.height);    
     }
 
@@ -773,6 +1133,16 @@ class MLVDCChart extends MLVChart{
            
             this.chart.filter([filter]);
         }
+    }
+
+
+    getCanvas(callback){
+    	let svg = this.chart.svg().node();
+    	let self = this;
+    	getImageFromSVG(svg,function(canvas,ctx){
+    	   callback(canvas); 
+    	})
+
     }
     
 	colorByField(params){
@@ -1243,8 +1613,405 @@ class MLVTimeLineChart extends MLVColorStackChart{
 }
 
 
+class SingleImageChart extends MLVChart{
+	constructor(ndx,div,config){
+		super(ndx,div,config);
+		this.type="single_image_chart";
+		this.image =$("<img>")
+		.attr("src",this.config.param)
+		.appendTo(this.div);
+	}
 
-class WGLScatterPlot extends MLVChart{
+	setSize(x,y){
+		super.setSize(x,y);
+		this.image.css({height:this.height-30,width:this.width});
+	}
+}
+
+class TextBoxChart extends MLVChart{
+	constructor(ndx,div,config){
+		super(ndx,div,config);
+		this.type="text_box_chart";
+		this.text=$("<div>").html(this.config.text).appendTo(this.div);
+	}
+
+	
+}
+
+
+class AverageBarChart extends MLVChart{
+	constructor(ndx,div,config){
+		super(ndx,div,config);
+        
+		this.averages=[];
+		this.len= config.param.length
+		for (let i=0;i<this.len;i++){
+			let av = {field:config.param[i],name:config.param[i]};
+			if (config.labels){
+				av.name=config.labels[i]
+			}
+			this.averages.push(av);
+		}
+		this.calculateAverages(this.ndx.getOriginalData());
+		this.calculateRanges(this.ndx.getOriginalData());
+		
+        this.type= "average_bar_chart";
+		var margin = {top: 0, right: 20, bottom: 30, left: 40};
+        var width = this.div.width() - margin.left - margin.right;
+        var height = this.div.height() - margin.top - margin.bottom-20;
+
+  
+        this.x = d3.scaleBand().padding(0.1);
+
+        this.y = d3.scaleLinear()
+     
+       
+          
+
+        this.svg = d3.select(this.div[0]).append("svg")
+        .attr("width", this.div.width())
+        .attr("height", this.div.height());
+        this.graph_area=this.svg
+      .append("g")
+        .attr("transform", 
+          "translate(" + margin.left + "," + margin.top + ")");
+         this.graph_area.selectAll(".bar")
+      .data(this.averages)
+        .enter().append("rect").attr("class", "bar");
+
+        
+  
+      this.x.domain(this.averages.map(function(d) { return d.name; }));
+      this.y.domain([0, 1]);
+      
+
+ 
+     
+      // add the x Axis
+      this.x_axis=this.graph_area.append("g")
+    
+
+      // add the y Axis
+      this.y_axis=this.graph_area.append("g")
+  
+     this.setSize();
+	}
+
+
+	_hide(items,length){
+        this.calculateAverages(items,length);
+        this.drawBars(this.div.height()-50);
+	}
+
+	remove(){
+     
+        this.div.remove();
+        
+    }
+
+
+	drawBars(height){
+	    let self =this;
+
+	    let trans = d3.transition()
+        .duration(400).ease(d3.easeLinear);
+	   this.graph_area.selectAll(".bar").transition(trans)
+      .attr("x", function(d) 
+      {
+      	 return self.x(d.name);
+       })
+      .attr("width", this.x.bandwidth())
+      .attr("fill","rgb(55, 126, 184)")
+      .attr("y", function(d) {
+      	 return self.scales[d.field](d.average);
+      	  })
+      .attr("height", function(d) { return height - self.scales[d.field](d.average); });
+
+
+	}
+
+	median(l,r){
+	   let med =l+Math.round((r-l)/2);
+	   return med;
+    }
+    calculateRanges(data,height,outlier_factor=4){
+    	this.scales={}
+    	for (let field of this.config.param){
+    		let arr=[];
+    		for (let item of data){
+    			if (item[field]!=null){
+    				arr.push(item[field]);
+    			}
+    			
+    		}
+    		arr = arr.sort((a,b)=>a-b);
+    		let n = arr.length;
+	
+	        let mid_index= this.median(0,n);
+	        let Q1= arr[this.median(0,mid_index)];
+	        let Q3=arr[this.median(mid_index+1,n)];
+	        let IQR= Q3-Q1;
+	        let min = Q1-(outlier_factor*IQR);
+	        for (let i=0;i<arr.length;i++){
+	        	if (arr[i]>min){
+	        		min=arr[i];
+	        		break
+	        	}
+
+	        }
+	        let max =Q3+(outlier_factor*IQR);
+	        for (let i=arr.length-1;i>=0;i--){
+	        	if (arr[i]<=max){
+	        		max=arr[i];
+	        		break;
+	        	}
+	        }
+	        this.scales[field] = d3.scaleLinear().range([height, 0]).domain([min,max]).clamp(true);
+	        
+    	}
+}
+
+    	
+	
+	
+	setSize(){
+		let height=this.div.height();
+		let width = this.div.width();
+		this.svg 
+        .attr("width", width)
+        .attr("height", height)
+		
+		this.x.range([0, width-60])
+		for (let field of this.config.param){
+			this.scales[field].range([height-50, 0]);[]
+		}
+        this.y.range([height-50,0]);
+        this.drawBars(height-50);
+        this.y_axis.call(d3.axisLeft(this.y));
+        this.x_axis
+      .attr("transform", "translate(0," + (height-50) + ")")
+      .call(d3.axisBottom(this.x));
+	}
+
+
+
+
+	calculateAverages(data,length){
+		let avs ={};
+		for (let field of this.config.param){
+			avs[field]=[0,0];
+		}
+		for (let index in data){
+			let item = data[index];
+			for (let field of this.config.param){
+				let v= item[field];
+				if (v!=null){
+					avs[field][0]=avs[field][0]+v;
+					avs[field][1]++;
+				}
+				
+			}
+		}
+		let av_list=[];
+		length=length?length:data.length;
+		for (let item of this.averages){
+		    if (!length || avs[item.field][1]===0){
+		    	item.average=0;
+		    	continue;
+		    }
+			item.average=avs[item.field][0]/avs[item.field][1];;
+		}
+	}
+}
+
+
+class WGLChart extends MLVChart{
+	addAxis(config){
+		if (!config){
+			config={};
+		}
+        this.scale_config=config;
+		this.y_axis_width=config.y_axis_width?config.y_axis_width:40;
+        this.x_axis_height=config.x_axis_height?config.x_axis_height:25;
+        let rs = getRandomString();
+        let holder_id= "wg-graph-holder"+rs;
+        this.holder_div=$("<div>").attr("id",holder_id)
+        
+                                .appendTo(this.div);
+        let id = "wg-graph-"+rs;
+        this.graph_id=id;
+        let graph_div= $("<div>").css({"position":"relative","margin-bottom":this.x_axis_height+"px","margin-left":this.y_axis_width+"px"})
+                                .attr("id",id)
+                                .css("z-index",20)
+                                .appendTo(this.holder_div)
+                               
+        if (config.right_y_axis){
+        	graph_div.css("margin-right","50px");
+        }
+        this.axis = d3.select("#"+holder_id).append("svg").attr("width", 50).attr("height", 50).styles({
+           position:"absolute",
+           top:"0px",
+           "z-index":10,
+           left:"0px",
+        });
+        this.y_axis_svg=this.axis.append("g");
+        this.x_axis_svg=this.axis.append("g");
+       
+        if (config.right_y_axis){
+            this.right_y_axis_svg=this.axis.append("g");
+        }
+        if (config.y_scale==="band"){
+            this.y_axis_scale = d3.scaleBand().padding(0.1);
+             if (config.right_y_axis){
+                this.right_y_axis_scale=d3.scaleBand().padding(0.1);
+            }
+        }
+        else{
+            this.y_axis_scale=  d3.scaleLinear();
+        }
+        if (config.x_scale==="band"){
+            this.x_axis_scale = d3.scaleBand().padding(0.1);
+          
+        }
+
+        
+        else{
+            this.x_axis_scale=  d3.scaleLinear();
+        }
+      
+      
+        if (config.right_y_axis){
+                this.right_y_axis_call=d3.axisRight(this.right_y_axis_scale);
+        }
+        this.x_axis_call= d3.axisBottom(this.x_axis_scale);   
+        this.y_axis_call=d3.axisLeft(this.y_axis_scale);
+	}
+
+
+
+
+
+
+	setSize(x,y){
+        if (x){
+            this.div.height(y);
+            this.div.width(x);
+        }
+        else{
+           y=this.div.height();
+           x=this.div.width();
+        }
+        if (!x || !y || this.is_loading){
+            return;
+        }
+        let th = this.ti.height()
+        this.height=y-th;
+         $("#"+this.graph_id).css("margin-left",this.y_axis_width+"px");
+        this.holder_div.height(this.height);
+        this.width=x;
+        let app_width= this.width-this.y_axis_width;
+        if (this.scale_config.right_y_axis){
+        	app_width-=50;
+        }
+        this.app.setSize(app_width,this.height-this.x_axis_height);
+        this.axis.attr("width",this.width).attr("height", this.height).styles({top:th+"px"});
+        let y_width=this.width-this.y_axis_width;
+        if (this.scale_config.right_y_axis){
+          
+             this.right_y_axis_scale.range([0,this.height-this.x_axis_height]);
+        }
+        this.x_axis_scale.range([0,app_width]);
+        this.y_axis_scale.range([0,this.height-this.x_axis_height]);
+
+
+        if (this.x_axis_label){
+            this.x_axis_label.attr("transform",
+                "translate(" + (this.width/2) + " ," + 
+                               (this.height) + ")");
+        }
+        if (this.y_axis_label){
+     	    this.y_axis_label.attr("transform", "translate(10,"+((this.height-this.x_axis_height)/2)+") rotate(-90)") ;
+        }
+        let bp = this.height-this.x_axis_height;
+        if (this.scale_config.x_scale==="band"){
+            let hpt= (this.width-this.y_axis_width)/	this.x_axis_scale.domain().length;
+         	let mod=1;
+         	if (hpt<12){
+         		let t_no=(this.width-this.y_axis_width)/12;
+         		mod=Math.round(this.x_axis_scale.domain().length/t_no);
+         	}
+            this.x_axis_call.tickValues(this.x_axis_scale.domain().filter(function(d,i){
+            	return !(i%mod) }));
+
+        }
+        else{
+        	this.x_axis_call.ticks(Math.round((this.width-this.y_axis_width)/40));
+        } 
+       
+        this.x_axis_svg
+        .attr("transform", "translate("+this.y_axis_width+","+bp+")")
+         .call(this.x_axis_call);
+         if  (this.scale_config.y_scale==="band"){
+         
+         	let hpt= (this.height-this.x_axis_height)/	this.y_axis_scale.domain().length;
+         	let mod=1;
+         	if (hpt<10){
+         		let t_no=(this.height-this.x_axis_height)/10;
+         		mod=Math.round(this.y_axis_scale.domain().length/t_no);
+         	}
+            this.y_axis_call.tickValues(this.y_axis_scale.domain().filter(function(d,i){
+            	return !(i%mod) }));
+            if  (this.scale_config.right_y_axis){
+            	let hpt= (this.height-this.x_axis_height)/	this.right_y_axis_scale.domain().length;
+         	    let mod=1;
+         	    if (hpt<10){
+         		    let t_no=(this.height-this.x_axis_height)/10;
+         		    mod=Math.round(this.right_y_axis_scale.domain().length/t_no);
+         	    }
+                    this.right_y_axis_call.tickValues(this.right_y_axis_scale.domain().filter(function(d,i){
+            	return !(i%mod) }));
+            }
+
+
+         }
+
+
+
+         else{
+
+             this.y_axis_call.ticks(Math.round((this.height-this.x_axis_height)/25));
+         }
+
+         this.y_axis_svg
+        .attr("transform", "translate("+this.y_axis_width+",0)")
+         .call(this.y_axis_call); 
+
+         if  (this.scale_config.right_y_axis){
+
+             this.right_y_axis_svg
+        .attr("transform", "translate("+(this.width-50)+",0)")
+         .call(this.right_y_axis_call); 
+         }
+       
+
+
+    }
+
+    getCanvas(callback){
+    	let svg = this.axis.node();
+    	let self = this;
+    	getImageFromSVG(svg,function(canvas,ctx){
+    		var image = new Image();
+    		self.app.refresh();
+    	    ctx.drawImage(self.app.canvas[0],self.y_axis_width,0);
+    	    callback(canvas);
+    	   
+    	})
+    }
+}
+
+
+class WGLScatterPlot extends WGLChart{
     constructor(ndx,div,config){
     	super(ndx,div,config);
 
@@ -1256,29 +2023,39 @@ class WGLScatterPlot extends MLVChart{
              }).appendTo(this.ti);
         
         this.default_color=[31, 119, 180];      
-        this.y_axis_width=40;
-        this.x_axis_height=25;
+       
         this.x= this.config.param[0];
         this.y= this.config.param[1];
         this.dim = ndx.dimension(function (d) {
-            return [d[self.x], d[self.y]];
+            return d.id;
         });
         this.group=this.dim.group();
-        let holder_id= "wg-graph-holder"+WGLScatterPlot.count++;
-        this.holder_div=$("<div>").attr("id",holder_id).appendTo(this.div);
-        let id = "wg-graph-"+WGLScatterPlot.count;
-        this.graph_id=id;
-        let graph_div= $("<div>").css({"position":"relative","margin-bottom":this.x_axis_height+"px","margin-left":this.y_axis_width+"px"}).attr("id",id).appendTo(this.holder_div);
-        this.axis = d3.select("#"+holder_id).append("svg").attr("width", 50).attr("height", 50).styles({
-           position:"absolute",
-           top:"0px",
-           left:"0px",
-           "z-index":-10
-        });
+        this.addAxis();
         if (!this.config.axis){
         	this.config.axis={};
         }
         let ax = this.config.axis;
+        if (!this.config.point_type){
+        	this.config.point_type="circle";
+        }
+
+        if (!this.config.brush){
+        	this.config.brush="default";
+        }
+        else{
+        	if (this.config.brush!=="poly"){
+        		this.config.brush="default";
+        	}
+        }
+         if (!this.config.on_filter){
+        	this.config.on_filter="hide";
+        }
+        else{
+        	if (this.config.on_filter!=="opaque"){
+        		this.config.on_filter="hide";
+        	}
+        }
+
 
 		ax.x_label = ax.x_label?ax.x_label:this.config.param[0];
 		ax.y_label = ax.y_label?ax.y_label:this.config.param[1];
@@ -1291,47 +2068,38 @@ class WGLScatterPlot extends MLVChart{
             .attr("text-anchor", "middle")  // this makes it easy to centre the text as the transform is applied to the anchor
    			.attr("font-size","13px")
             .text(ax.y_label);
-        this.y_axis_svg=this.axis.append("g");
-        this.x_axis_svg=this.axis.append("g");
+       
 
-        this.y_axis_scale=  d3.scaleLinear();
-        this.x_axis_scale= d3.scaleLinear();
+     
 
-        this.x_axis_call= d3.axisBottom(this.x_axis_scale)
-        	.tickFormat(function(v,i){
-         					if (self.config.axis.x_log_scale){
-         						let m=v>0?1:-1
-         				
-         						v= Math.pow(10,Math.abs(v))*m;
-         						if (!Number.isInteger(v)){
-         							return "";
-         						}
-         					}
-         					
-                            if (v>=10000 || v<=-10000){
-                                return Number.parseFloat(v).toPrecision(2);
-                            }
-                            return v;
-                        
-         
-               });
-        this.y_axis_call=d3.axisLeft(this.y_axis_scale)
-        	.tickFormat(function(v,i){
-         					if (self.config.axis.y_log_scale){
-         						v= Math.pow(10,v);
-         						if (!Number.isInteger(v)){
-         							return "";
-         						}
-         					}
-         					
-                            if (v>=10000){
-                                return Number.parseFloat(v).toPrecision(2);
-                            }
-                            return v;
-                        
-         
-               });
-        this.app = new WGL2DI(id,this.div.width(),this.div.height(),{default_brush:true});
+        this.x_axis_call.tickFormat(function(v,i){
+			if (self.config.axis.x_log_scale){
+				v= self._getInverseLogValue(v);
+				if (!Number.isInteger(v)){
+					return "";
+				}
+			}
+			if (v>=10000 || v<=-10000){
+				return Number.parseFloat(v).toPrecision(2);
+			}
+			return v;
+        });
+
+        this.y_axis_call.tickFormat(function(v,i){
+			if (self.config.axis.y_log_scale){
+				v=self._getInverseLogValue(v);
+				if (!Number.isInteger(v)){
+					return "";
+				}
+			}
+			if (v>=10000){
+				return Number.parseFloat(v).toPrecision(2);
+			}
+			return v;
+        });
+        this.createApp()
+               
+      
 
         this.app.addHandler("zoom_stopped",function(data){
             self._updateScale(data);
@@ -1343,15 +2111,24 @@ class WGLScatterPlot extends MLVChart{
           
         });
 
-        this.app.addHandler("brush_stopped",function(range){
+        this.app.addHandler("brush_stopped",function(range,is_poly){
 		    self.reset_but.css("visibility","visible");
-		    range.y_max=-range.y_max;
-		    range.y_min=-range.y_min;
-		    self._createFilter(range);
+		    if (!is_poly){
+		        range.y_max=-range.y_max;
+		        range.y_min=-range.y_min;
+		        self._createFilter(range);
+		    }
+		    else{
+		    	self._createPolyFilter(range);
+		    }
 		});
-
         this.init();
 		   
+    }
+
+
+    highlightDataItem(key){
+    	this.app.highlightPoint(key);
     }
 
     getFilter(){
@@ -1364,6 +2141,11 @@ class WGLScatterPlot extends MLVChart{
     	return filters;
     }
 
+    createApp(){
+
+         this.app = new WGL2DI(this.graph_id,this.div.width(),this.div.height(),{brush:this.config.brush});
+    }
+
   
 
 
@@ -1371,12 +2153,20 @@ class WGLScatterPlot extends MLVChart{
     setColorFromConfig(){
     	let sc= null;
     	if (this.config.color_by){
-    		let c= this.config.color_by; 	
+    		let c= this.config.color_by;
+    		let gc=null;
+    		if (this.config.group_colors){
+    			if(this.config.group_colors[c.column.field]){
+    				gc=this.config.group_colors[c.column.field]
+    			}
+    		} 	
     		sc = FilterPanel.getColorScale(c.column,
     								this.ndx.getOriginalData(),
     								c.scheme,
     								this.graph_id,
+    								gc
     								);
+    		sc.display_legend=this.config.color_by.display_legend;
     		
     	}
     	this.colorByField(sc);
@@ -1400,17 +2190,39 @@ class WGLScatterPlot extends MLVChart{
     		this.config.color_by={
     			column:param.column,
     			scheme:param.scheme,
+    			display_legend:param.display_legend
     		}
+
 		}
+		
+		
 		else{
 			delete this.config.color_by;
 		}
         let data =this.ndx.getOriginalData();
+        if (this.config.color_by){
+        	if (this.config.color_by.display_legend===false){
+			    $("#"+this.graph_id+"-bar").hide();
+		    }
+		    else{
+			    $("#"+this.graph_id+"-bar").show();
+		    }
+        }
        
         if (param){
         	let field=param.column.field;
         	for (let item of data){
-            	let color = this.convertToRGB(param.func(item[field]));
+        		let v= item[field];
+        		if (v===undefined || v===null){
+        			v="none";
+        		}
+        		let color  = param.func(v);
+        		if (color){
+            	    color = this.convertToRGB(color);
+        		}
+            	else{
+            		color=[255,255,255];
+            	}
             	this.app.setObjectColor(item.id,color);
         	}
         }
@@ -1503,10 +2315,18 @@ class WGLScatterPlot extends MLVChart{
     	this.type="wgl_scatter_plot";
     	let data = this.ndx.getOriginalData();   
     	for (let item of data){
-    		if (isNaN(item[this.x])|| isNaN(item[this.y])){
+    		let x=item[this.x];
+    		let y=item[this.y];
+    		if (x==null || isNaN(x)|| y==null || isNaN(y)){
     			continue;
     		}
-			this.app.addCircle([item[this.x],-(item[this.y])],this.config.radius,this.default_color,item.id);
+    		if (this.config.point_type==="square"){
+                this.app.addSquare([x,-y],this.config.radius,this.default_color,item.id);
+    		}
+    		else{
+    			this.app.addCircle([x,-y],this.config.radius,this.default_color,item.id);
+    		}
+			
 		}
 		this.app.setUniversalCircleRadius(this.config.radius);
 		this.afterInit();
@@ -1536,52 +2356,160 @@ class WGLScatterPlot extends MLVChart{
         this.dim.filter(null);
         let left  = this.dim.getIds();
         this.dim.dispose();
+        this.app.remove();
         this.div.remove();
         return left;
     }
 
     removeFilter(){
-        this.dim.filter(null);
-        this.app.clearBrush();
-        this.reset_but.css("visibility","hidden");
+    	if (this.range==null){
+    		return;
+    	}
+    	else{
+    		 this.app.clearBrush();
+             this.reset_but.css("visibility","hidden");
+             this._createFilter(null,true)
+
+    	}
+      
+       
     }
     
-    _createFilter(range){
+    _createFilter(range,no_propagate){
 		this.range=range;
+		let self =this;
+		
         if (range==null){
             this.dim.filter(null);
         }
         else{
         	let y_max=range.y_max;
         	let y_min=range.y_min;
+        	let x_max=range.x_max;
+        	let x_min=range.x_min;
+
+
          	if (this.config.axis.y_log_scale){
-         		y_max=Math.pow(10,y_max);
-         		y_min=Math.pow(10,y_min);
+         		y_max=this._getInverseLogValue(y_max);
+         		y_min=this._getInverseLogValue(y_min);
+         	}
+         	if (this.config.axis.x_log_scale){
+         		x_max=this._getInverseLogValue(x_max);
+         		x_min=this._getInverseLogValue(x_min);
          	}
          	
-            this.dim.filter(function(d){
-                if (d[0]>range.x_max || d[0]<range.x_min){
-                    return false;
+         	let x= this.x;
+         	let y =this.y;
+         	let items =this.ndx.getOriginalData();
+          /*  for (let d of items){
+                if (d[x]> x_max|| d[x]<x_min){
+                   continue;
                 }
-                if (d[1]<y_max || d[1]>y_min){
-                    return false;
+                if (d[y]<y_max || d[y]>y_min){
+                    continue;
                 }
-                if (isNaN(d[0])|| isNaN(d[1])){
-                	return false;
+                if (isNaN(d[x])|| isNaN(d[y])){
+                	continue;
+                }
+                ids[d.id]=true;
+            }*/
+            this.dim.filter(function(i){
+        	  let d =self.ndx.getItemById(i);
+                if (d[x]> x_max|| d[x]<x_min){
+                   return false;
+                }
+                if (d[y]<y_max || d[y]>y_min){
+                    return false
+                }
+                if (isNaN(d[x])|| isNaN(d[y])){
+                	return false
                 }
                 return true;
-            });
-        }
-        dc.redrawAll();
-        let name = range?this.config.id:null;
+            })
 
-        this.updateListener(this.dim.getIds(),name);
+        }
+
+      
+        
+       
+        
+       let  ids= this.dim.getIds();
+        if(range ==null){
+        	this._hide(ids.items)
+        }
+        this._filter(ids.items);
+        if (!no_propagate){
+        	dc.redrawAll();
+            this.updateListener(ids,this.config.id);
+        }
+    }
+
+    _createPolyFilter(vs){
+    	this.range=true;
+    	for (let pt of vs){
+    		pt[1]=-pt[1];
+    		if (this.config.axis.x_log_scale){
+    			pt[0]=this._getInverseLogValue(pt[0]);
+    		}
+    		if (this.config.axis.y_log_scale){
+    			pt[1]=this._getInverseLogValue(pt[1]);
+    		}
+    	}
+    	let tx= this.x;
+        let ty =this.y;
+        let items =this.ndx.getOriginalData();
+        let ids={};
+        for (let d of items){
+
+    	
+   
+			var x = d[tx], y = d[ty];
+
+			var inside = false;
+			for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+				var xi = vs[i][0], yi = vs[i][1];
+				var xj = vs[j][0], yj = vs[j][1];
+
+				var intersect = ((yi > y) != (yj > y))
+					&& (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+				if (intersect) inside = !inside;
+			}
+
+			if(inside){
+				ids[d.id]=true;
+			}
+		}
+		this.dim.filter(function(d){
+        	 return ids[d];
+        })
+
+        ids= this.dim.getIds();
+        dc.redrawAll();
+        this._filter(ids.items);
+		this.updateListener(ids,this.config.id);
+
     }
 
     _getLogValue(val){
+    	if (+val===0){
+    		return 0;
+    	}
     	let m=val>0?1:-1;
-    	val = Math.log10(Math.abs(val));
+    	let abs = Math.abs(val);
+    	if (abs<1){
+    		return 0;
+    	}
+    	val = Math.log10(abs);
     	return val*m;
+    }
+
+    _getInverseLogValue(val){
+    	if (+val===0){
+    		return 0;
+    	}
+    	let m=val>0?1:-1;
+    	val=Math.pow(10,Math.abs(val));
+        return val*m;
     }
 
     centerGraph(){
@@ -1590,11 +2518,11 @@ class WGLScatterPlot extends MLVChart{
     	let min_x=this.config.min_x || this.config.min_x==0?this.config.min_x:this.min_x;
     	let min_y=this.config.min_y || this.config.min_y==0?this.config.min_y:this.min_y;
     	if (this.config.axis.y_log_scale){
-    		max_y=this._getLogValue(max_y);
-    		min_y=this._getLogValue(min_y);
+    		max_y=this._getLogValue(max_y);   			   		
+    		min_y=this._getLogValue(min_y);    		
     	}
     	if (this.config.axis.x_log_scale){
-    		max_x=this._getLogValue(max_x);
+    		max_x=this._getLogValue(max_x);   		
     		min_x=this._getLogValue(min_x);
     	}
 
@@ -1650,50 +2578,23 @@ class WGLScatterPlot extends MLVChart{
     	this._updateScale(this.app.getRange());     
     }
 
-    setSize(x,y){
-        if (x){
-            this.div.height(y);
-            this.div.width(x);
-        }
-        else{
-           y=this.div.height();
-           x=this.div.width();
-        }
-        if (!x || !y || this.is_loading){
-            return;
-        }
-        let th = this.ti.height()
-        this.height=y-th;
-        this.holder_div.height(this.height);
-        this.width=x;
-        this.app.setSize(this.width-this.y_axis_width,this.height-this.x_axis_height);
-        this.axis.attr("width",this.width).attr("height", this.height).styles({top:th+"px"});
 
-        this.x_axis_scale.range([0,this.width-this.y_axis_width]);
-        this.y_axis_scale.range([0,this.height-this.x_axis_height]);
-        this.x_axis_label.attr("transform",
-            "translate(" + (this.width/2) + " ," + 
-                           (this.height) + ")")
-     	this.y_axis_label.attr("transform", "translate(10,"+((this.height-this.x_axis_height)/2)+") rotate(-90)") 
-        let bp = this.height-this.x_axis_height;
-        this.x_axis_call.ticks(Math.round((this.width-this.y_axis_width)/40));
-        this.x_axis_svg
-        .attr("transform", "translate("+this.y_axis_width+","+bp+")")
-         .call(this.x_axis_call);
-         this.y_axis_call.ticks(Math.round((this.height-this.x_axis_height)/25));
 
-         this.y_axis_svg
-        .attr("transform", "translate("+this.y_axis_width+",0)")
-         .call(this.y_axis_call); 
-    }
-
-    _hide(ids){ 
-        this.app.hideObjects(ids);
+    _hide(ids){
+    	let ob_type=this.config.point_type==="square"?3:0;
+        if (this.config.on_filter==="opaque"){
+        	this._filter(ids,ob_type);
+        	return;
+        }
+     
+        this.app.hideObjects(ids,ob_type,this.def_op);
         this.app.refresh();
     }
 
     _filter(ids){
-        this.app.filterObjects(ids);
+    	let ob_type=this.config.point_type==="square"?3:0;
+        this.app.filterObjects(ids,ob_type);
+        //this._hide(ids);
         this.app.refresh()
     }
 
@@ -1705,6 +2606,32 @@ class WGLScatterPlot extends MLVChart{
             this.app.setObjectColor(id,items[id]);
 
         }
+    }
+    refreshPositions(){
+    	let data = this.ndx.getOriginalData();
+    	for (let item of data){
+    		this.app.setObjectPosition(item.id,item[this.x],-item[this.y]);
+
+    	}
+    	
+        let min_max = findMinMax(data,this.y)
+        this.max_y=min_max[1]
+        this.min_y=min_max[0];
+ 
+        min_max = findMinMax(data,this.x)
+        this.max_x= min_max[1];
+        this.min_x= min_max[0];
+        this.dim.dispose();
+        let self =this;
+        this.dim = this.ndx.dimension(function (d) {
+            return [d[self.x], d[self.y]];
+        }),
+        this.group=this.dim.group();
+        let val = this._calculateRadius();
+        this.config.radius=val;
+        this.app.setUniversalCircleRadius(val);   
+    	this.centerGraph();
+    	this.app.refresh();
     }
 
 
@@ -1908,6 +2835,27 @@ class MLVRowChart extends MLVDCChart{
 			this.config.cap=8;
 		}
 		this.chart.margins().right = 10;
+		let f =typeof this.config.param === "string"?this.config.param:this.config.param[0];
+		this.cs = FilterPanel.cat_color_schemes["Scheme 1"].slice(0);
+		this.cs.splice(this.config.cap,0,"black");
+		let vals = null;
+		if (this.config.delimiter){
+			vals =groupAndOrderArrayData(this.ndx.getOriginalData(),f,this.config.delimiter);
+		}
+		else{
+			vals =groupAndOrder(this.ndx.getOriginalData(),f);
+		}
+		 
+		let i=0;
+		this.val_to_order={};;
+		for (let  v of vals){
+			this.val_to_order[v.value]=i;
+			if (i===this.cs.length){
+				break;
+			}
+			i++;
+
+		}
 
       
         this.setParameters();
@@ -1963,25 +2911,60 @@ class MLVRowChart extends MLVDCChart{
 			}); 
 		}
 
+    
+     
        
-        this.chart
-            .dimension(this.dim)
+       
+       this.chart.dimension(this.dim)
+            .ordering(function(d,b){
+            	return self.val_to_order[d.key]
+            })
             .group(this.group)
-             .elasticX(true)
+             .elasticX(true);
+       
              
         if (this.group.size()===1){
             this.chart.fixedBarHeight(20);
-        }      
-       
+        } 
+        if (this.config.group_colors && this.config.group_colors[field]){
+       	    let val_to_order={};
+       	    let cs=[];
+       	    let index=0;
+       	    if (this.config.delimiter){
+       	    	this.config.group_colors[field].sort(function(a,b){
+       	    		return a[0].localeCompare(b[0])
+       	    	});
+       	    
+       	    }
+       	    for (let item of this.config.group_colors[field]){
+                val_to_order[item[0]]=index;
+                cs.push(item[1]);
+                index++;
+       	    }
+       	    this.chart.ordering(function(d){
+       	    	return val_to_order[d.key];
+       	    });
+       	    this.chart.ordinalColors(cs);
+
+       }
+       else{
+        this.chart.ordinalColors(this.cs);
+        this.chart.cap(this.config.cap); 
+       }
       
-        this.chart.cap(this.config.cap);
+        
+      
         this.chart.render();
+      
+
     }
 
 
    setCap(cap){
+   	let self=this;
     	this.config.cap=cap;
     	this.chart.cap(cap);
+    	  
     	this.chart.redraw();
     }
 
@@ -2004,7 +2987,8 @@ class MLVRowChart extends MLVDCChart{
                             return v
                         }
                     });
-        this.chart.redraw()
+        this.chart.redraw();
+         
     }
 
     getFilter(){
@@ -2021,7 +3005,7 @@ class MLVRowChart extends MLVDCChart{
 
 
 class BoxPlot extends MLVDCChart{
-	constructor(ndx,div,config){   
+	constructor(ndx,div,config,columns){   
         super(ndx,dc.boxPlot,div,config);
         this.type="box_plot";
         let self = this;
@@ -2036,6 +3020,27 @@ class BoxPlot extends MLVDCChart{
         	}
         	this.categories.push(vals[n].value)
         }
+        for (let c of columns){
+        	if (c.field===config.param[0]){
+                if (c.colors){
+                	let order=[];
+                	this.config.cat_order=[];
+                	this.config.colors=[];
+                	for (let x of c.colors){
+                		this.config.cat_order.push(x[0]);
+                		order.push(x);
+                	}
+                	order.sort(function(a,b){
+                		return a[0].localeCompare(b[0])
+                	});
+                	for (let x of order){
+                		this.config.colors.push(x[1]);
+                	}
+                }
+        	}
+        	break;
+        }
+
        
       
         this.setParameters();
@@ -2045,6 +3050,13 @@ class BoxPlot extends MLVDCChart{
         else{
         	this.setSize(this.config.size[0],this.config.size[1]);
         }
+
+       /*this.chart.on('pretransition', chart => {
+            chart.selectAll('circle.data').attr('fill', function(d,e,f) {
+                  const boxDatum = d3.select(this.parentNode).datum();
+                return "blue";
+        })
+        });*/
              
 
 
@@ -2140,10 +3152,17 @@ class BoxPlot extends MLVDCChart{
 			this.group    = this.dim.group().reduce(
 				function(p,v) {
 				  // keep array sorted for efficiency
+				  if (v[pa]== null){
+				  	return p;
+				  }
+				
 				  p.splice(d3.bisectLeft(p, v[pa]), 0, v[pa]);
 				  return p;
 				},
 				function(p,v) {
+				   if (v[pa]== null){
+				  	return p;
+				  }
 				  p.splice(d3.bisectLeft(p, v[pa]), 1);
 				  return p;
 				},
@@ -2174,7 +3193,14 @@ class BoxPlot extends MLVDCChart{
        	if (this.config.colors){
        		this.chart.ordinalColors(this.config.colors);
        	
+       	
        	}
+       	if (this.config.cat_order){
+       		this.chart.ordering(function(d){
+       			return self.config.cat_order.indexOf(d.key);
+       		});
+       	}
+       	
        	if (!this.config.max_y){
        		this.chart.elasticY(true)
        	}
@@ -2445,6 +3471,11 @@ class AddChartDialog extends BaseFieldDialog{
         	if (type.includes("image") && !(this.config.images)){
         		continue;
         	}
+           if (this.config.exclude_graph_types){
+           	    if (this.config.exclude_graph_types.indexOf(type)!==-1){
+           	    	continue;
+           	    }
+           }
            this.chart_select.append($('<option>', {
 	           value: type,
 	           text:MLVChart.chart_types[type].name
@@ -2462,13 +3493,26 @@ class AddChartDialog extends BaseFieldDialog{
        
     	let config ={};
     	config.param=[];
-    	for (let select of this.param_inputs){
-    		let val = select.val();
-    		if (val !== "none"){
-    			config.param.push(select.val())
-    		}
-    		
+    	let self =this;
+    	if (this.column_list){
+    		config.labels=[];
+            this.column_list.children().each(function(i,e){
+            	let f= $(e).data("field");
+            	config.param.push(f);
+            	config.labels.push(self.field_to_column[f].name);
+            })
     	}
+    	else{
+    		for (let select of this.param_inputs){
+    		    let val = select.val();
+    		    if (val !== "none"){
+    			    config.param.push(select.val())
+    		    }
+    		
+    	    }
+
+    	}
+
     	if (config.param.length===1){
     		config.param = config.param[0];
     	}
@@ -2484,7 +3528,6 @@ class AddChartDialog extends BaseFieldDialog{
         	addToConfig(config,this.config,this.field_to_column);
         }
 
-        let self = this;
         setTimeout(function(){
         	self.callback(config);
         },20);
@@ -2496,13 +3539,20 @@ class AddChartDialog extends BaseFieldDialog{
         let field_div=$("<div>").appendTo(this.div);
         this.param_inputs=[];
         let params = MLVChart.chart_types[type].params;
+        if (typeof params === "string"){
+        	if (params === "number"){
+        		this._addMultiColumnSelect(field_div);
+        	}
+        }
+        else{
 
-        for (let param of params){
-        	 field_div.append("<label>"+param.name+"</label>");
-        	 let param_select =$("<select>").appendTo(field_div);
-        	 this._populateFields(param_select,param.type,param.optional);
-        	 field_div.append("<br>");
-        	 this.param_inputs.push(param_select)
+			for (let param of params){
+				 field_div.append("<label>"+param.name+"</label>");
+				 let param_select =$("<select>").appendTo(field_div);
+				 this._populateFields(param_select,param.type,param.optional);
+				 field_div.append("<br>");
+				 this.param_inputs.push(param_select)
+			}
         }
 
         let but = $("<button>").text("next").attr("class","btn btn-sm btn-secondary").appendTo(field_div)
@@ -2512,6 +3562,37 @@ class AddChartDialog extends BaseFieldDialog{
             });
     }
 
+    _addMultiColumnSelect(field_div){
+    	let self = this;
+    	let param_select =$("<select>").appendTo(field_div);
+        this._populateFields(param_select,"number");
+        field_div.append("<label>Select Columns</label>");
+        field_div.append(param_select);
+        let already={};
+        this.column_list = $("<div>").attr({id:"column-list"}).css({margins:"4px",height:"50px"});
+         let but = $("<button>").text("Add").attr("class","btn btn-sm btn-secondary")
+         .click(function(e){
+                let field = param_select.val();
+                if (already[field]){
+                	return;
+                }
+                already[field]=true;
+                let d = $("<div>").append("<span>"+self.field_to_column[field].name)
+                .data("field",field)
+                .appendTo(self.column_list);
+                let tr = $("<i class = 'fas fa-trash'></i>").css({cursor:"pointer"})
+                .click(function(e){
+                	delete already[$(this).parent().data("field")];
+                	$(this).parent().remove();
+
+                })
+                .appendTo(d);
+         })
+         field_div.append(but).append(this.column_list);
+
+
+    }
+
     _addTitle(){
         let title_div=$("<div>").appendTo(this.div);
         title_div.append("<label>Title:</title>");
@@ -2519,6 +3600,9 @@ class AddChartDialog extends BaseFieldDialog{
         let title="";
         if (this.param_inputs.length==1){
         	title= this.field_to_column[this.param_inputs[0].val()].name;
+        }
+        else if (this.column_list){
+        	title = "Column Average";
         }
         else{
             title= this.field_to_column[this.param_inputs[0].val()].name;
@@ -2806,8 +3890,30 @@ class WGLScatterPlotDialog extends MLVChartDialog{
            
           });
         div.append("<span>Y axis</span>");
-       
 
+        this.div.append("<hr>");
+        this.div.append("<label>Selection Type</label>");
+        let r_name = getRandomString();
+        div=$("<div>");
+
+        div.append("<span>Default</span>").append( $("<input>").attr({type:"radio","name":r_name,value:"default"}).css("margin-right","4px").prop("checked",this.graph.config.brush==="default"));
+        div.append("<span>Free Draw</span>").append( $("<input>").attr({type:"radio","name":r_name,value:"poly"}).css("margin-right","4px").prop("checked",this.graph.config.brush==="poly"));
+         this.div.append(div);
+        $('input[name="'+r_name+'"]').click(function(e){
+        	self.graph.config.brush=$(this).val();
+        	self.graph.app.config.brush=$(this).val();
+        });
+        this.div.append("<label>Filtered Points</label>");
+        r_name = getRandomString();
+        div=$("<div>");
+
+        div.append("<span>Hide</span>").append( $("<input>").attr({type:"radio","name":r_name,value:"hide"}).css("margin-right","4px").prop("checked",this.graph.config.on_filter==="hide"));
+        div.append("<span>Make opaque</span>").append( $("<input>").attr({type:"radio","name":r_name,value:"opaque"}).css("margin-right","4px").prop("checked",this.graph.config.on_filter==="opaque"));
+         this.div.append(div);
+        $('input[name="'+r_name+'"]').click(function(e){
+        	self.graph.config.on_filter=$(this).val();
+        });
+       
 
         let but = $("<button>").attr({"class":"btn btn-sm btn-secondary"})
             .text("Centre Plot").appendTo(this.div)
@@ -2886,6 +3992,22 @@ MLVChart.chart_types={
             }
 		},
 		dialog:WGLScatterPlotDialog
+	 },
+
+	 single_image_chart:{
+	 	"class":SingleImageChart,
+	 	name:"Image"
+	 },
+
+	 text_box_chart:{
+	 	"class":TextBoxChart,
+	 	name:"Text Box"
+	 },
+
+	 average_bar_chart:{
+	 	"class":AverageBarChart,
+	 	name:"Bar Chart (Column Average)",
+	 	params:"number"
 	 },
 	 bar_chart:{
 		"class":MLVBarChart,
@@ -2972,12 +4094,16 @@ function hexToRgb(hex) {
 function groupAndOrder(data,field){
 	let t_dict={}
 	for (let item of data){
-		let q= t_dict[item[field]];
+		let v = item[field];
+		if (v===undefined || v== null){
+			v="none";
+		}
+		let q= t_dict[v];
 		if (!q){
-			t_dict[item[field]]=1;
+			t_dict[v]=1;
 		}
 		else{
-			t_dict[item[field]]++;
+			t_dict[v]++;
 		}
 	}
 	let arr=[];
@@ -2985,10 +4111,54 @@ function groupAndOrder(data,field){
 		arr.push({"value":v,"count":t_dict[v]})
 	}
 	arr.sort(function(a,b){
+		if (a.count===b.count){
+			return a.value.localeCompare(b.value);
+		}
 		return b.count-a.count;
 	})
 	return arr;
+
 }
+
+
+function groupAndOrderArrayData(data,field,delimiter){
+	let t_dict={}
+	for (let item of data){
+
+		let i = item[field];
+		if (i===undefined || i === null){
+			continue;
+		}
+		let values = i.split(",");
+		for (let v of values){
+			if (v===undefined || v== null){
+				v="none";
+			}
+			let q= t_dict[v];
+			if (!q){
+				t_dict[v]=1;
+			}
+			else{
+				t_dict[v]++;
+			}
+		}
+	}
+	let arr=[];
+	for (let v in t_dict){
+		arr.push({"value":v,"count":t_dict[v]})
+	}
+	arr.sort(function(a,b){
+		if (a.count===b.count){
+			return a.value.localeCompare(b.value);
+		}
+		return b.count-a.count;
+	})
+	console.log(arr);
+	return arr;
+
+}
+
+
 
 FilterPanel.color_schemes = {
 	'spectral8': ['#3288bd','#66c2a5','#abdda4','#e6f598','#fee08b','#fdae61','#f46d43','#d53e4f'],
@@ -2998,7 +4168,21 @@ FilterPanel.color_schemes = {
 
 
 FilterPanel.cat_color_schemes={
-	"Scheme 1":d3.schemeSet1.slice(1,9)
+	"Scheme 1":[
+	"#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999", "#1CE6FF", "#FF34FF",
+	"#FF4A46", "#008941", "#676FA6", "#A30059", "#FFDBE5", "#7A4900", "#0000A6", "#63FFAC", "#B79762",
+	"#004D43", "#8FB0FF", "#997D87", "#5A0007", "#809693", "#FEFFE6", "#1B4400", "#4FC601", "#3B5DFF", "#4A3B53", "#FF2F80",
+"#61615A", "#BA0900", "#6B7900", "#00C2A0", "#FFAA92", "#FF90C9", "#B903AA", "#D16100",
+"#DDEFFF", "#000035", "#7B4F4B", "#A1C299", "#300018", "#0AA6D8", "#013349", "#00846F",
+"#372101", "#FFB500", "#C2FFED", "#A079BF", "#CC0744", "#C0B9B2", "#C2FF99", "#001E09",
+"#00489C", "#6F0062", "#0CBD66", "#EEC3FF", "#456D75", "#B77B68", "#7A87A1", "#788D66",
+"#885578", "#FAD09F", "#FF8A9A", "#D157A0", "#BEC459", "#456648", "#0086ED", "#886F4C",
+"#34362D", "#B4A8BD", "#00A6AA", "#452C2C", "#636375", "#A3C8C9", "#FF913F", "#938A81",
+"#575329", "#00FECF", "#B05B6F", "#8CD0FF", "#3B9700", "#04F757", "#C8A1A1", "#1E6E00",
+"#7900D7", "#A77500", "#6367A9", "#A05837", "#6B002C", "#772600", "#D790FF", "#9B9700",
+"#549E79", "#FFF69F", "#201625", "#72418F", "#BC23FF", "#99ADC0", "#3A2465", "#922329",
+"#5B4534", "#FDE8DC"],
+	"Scheme 2":d3.schemeSet1.slice(1,9)
 }
 
 function linspace(start, end, n) {
@@ -3028,7 +4212,7 @@ function linspace(start, end, n) {
 * object of values to their colors. If there were more categories than colors - excess categories will be assigned to other
 */
 
-FilterPanel.getColorScale=function(column,data,scheme,div_id){
+FilterPanel.getColorScale=function(column,data,scheme,div_id,colors){
 		let scale= null;
 		let default_scheme=(column.datatype==="text")?"Scheme 1":"spectral8"
 		if (!scheme){
@@ -3057,15 +4241,34 @@ FilterPanel.getColorScale=function(column,data,scheme,div_id){
 		for (let c of scale){
 			n_scale.push(hexToRgb(c))
 		}
-		for (let i=0;i<n_scale.length;i++){
-			if (i===values.length){
-				break;
+		let value_to_number={};
+		let tot=0;
+		if (colors){
+		    for (let i=0;i<values.length;i++){
+				value_to_number[values[i].value]=values[i].count;
+				tot+=values[i].count;
 			}
-			value_to_color[values[i].value]=n_scale[i];
-			items.push({text:values[i].value,color:n_scale[i]})
+			for (let col of colors){
+				let rgb = hexToRgb(col[1]);
+				value_to_color[col[0]]=rgb;
+				items.push({text:col[0],color:rgb});
+			}
+			
+		}
+		else{
+			for (let i=0;i<n_scale.length;i++){
+				if (i===values.length){
+					break;
+				}
+				value_to_color[values[i].value]=n_scale[i];
+				value_to_number[values[i].value]=values[i].count;
+				tot+=values[i].count;
+				items.push({text:values[i].value,color:n_scale[i]})
+			}
 		}
 		if (values.length>items.length){
 			items.push({text:"Other",color:other_color})
+			value_to_number["other"] = data.length-tot;
 		}
 
 		let color_function=function(v){
@@ -3079,6 +4282,7 @@ FilterPanel.getColorScale=function(column,data,scheme,div_id){
 			func:color_function,
 			column:column,
 			value_to_color:value_to_color,
+			value_to_number:value_to_number,
 			scheme:scheme
 		}
 	}
@@ -3143,7 +4347,8 @@ class ColorByDialog extends BaseFieldDialog{
      	let config={
      		limit_datatype:limit_datatype?limit_datatype:"all",
      		existing_param:existing_param,
-     		data:data
+     		data:data,
+     		has_legend:div_id!==undefined
      	}
         super(columns,callback,"Color By",[260,350],"OK",config);
 
@@ -3197,8 +4402,18 @@ class ColorByDialog extends BaseFieldDialog{
         	this.column=this.config.existing_param.column;   
         }
 		this._populateSchemeSelect(this.column.datatype);
+		if (this.config.has_legend){
+			let cs = $("<div>").appendTo(this.div);
+			cs.append($("<span>Show Legend</span>"));
+			let ch=true;
+			if (this.config.existing_param){
+				ch = this.config.existing_param.display_legend;
+			}
+			this.show_legend_check=$("<input type='checkbox'>").appendTo(cs).prop("checked",ch);
+		}
         this.div.append("<hr>");
         this.scale_div= $("<div>").appendTo(this.div);
+       
         
       	this.log_check=$("<input type='checkbox'>").appendTo(this.scale_div)
       		.click(function(e){
@@ -3325,6 +4540,9 @@ class ColorByDialog extends BaseFieldDialog{
          	delete col.min_value;
          }
          let color_scale= FilterPanel.getColorScale(col,this.config.data,scale,this.div_id);
+         if (this.show_legend_check){
+         	color_scale.display_legend= this.show_legend_check.prop("checked");
+         }
          this.callback(color_scale);
 
      }
@@ -3332,7 +4550,7 @@ class ColorByDialog extends BaseFieldDialog{
 
 class MLVColorLegend{
 	constructor(div_id,items,name){
-		this.id=div_id+"-bar";
+	this.id=div_id+"-bar";
 		let pos = ["24px","50px"];
 		let el = $("#"+this.id)
 		if (el.length){
@@ -3534,11 +4752,78 @@ function getRandomString(len,an){
 
 
 
+function copyStylesInline(destinationNode, sourceNode) {
+   var containerElements = ["svg","g"];
+   for (var cd = 0; cd < destinationNode.childNodes.length; cd++) {
+       var child = destinationNode.childNodes[cd];
+       if (containerElements.indexOf(child.tagName) != -1) {
+            copyStylesInline(child, sourceNode.childNodes[cd]);
+            continue;
+       }
+       var style = sourceNode.childNodes[cd].currentStyle || window.getComputedStyle(sourceNode.childNodes[cd]);
+       if (style == "undefined" || style == null) continue;
+       for (var st = 0; st < style.length; st++){
+            child.style.setProperty(style[st], style.getPropertyValue(style[st]));
+       }
+   }
+}
+
+
+
+function getImageFromSVG(svg,callback) {
+  var copy = svg.cloneNode(true);
+  copyStylesInline(copy, svg);
+  var canvas = document.createElement("canvas");
+  var bbox = svg.getBBox();
+  $(copy).css("top","0px");
+  canvas.width = svg.width.baseVal.value
+  canvas.height =svg.height.baseVal.value
+  var ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  var data = (new XMLSerializer()).serializeToString(copy);
+  var DOMURL = window.URL || window.webkitURL || window;
+  var img = new Image();
+  var svgBlob = new Blob([data], {type: "image/svg+xml;charset=utf-8"});
+  var url = DOMURL.createObjectURL(svgBlob);
+  img.src = url;
+        img.onload = function () {
+        ctx.drawImage(img, 0, 0);
+        callback(canvas,ctx)
+  }
+ 
+}
+
+class PopUpWindow{
+	constructor(div){
+		let rs = getRandomString();
+		let self =this;
+		let winHtml = "<!DOCTYPE html><html><body><div id= '"+rs+"' ></div></body><html>";
+		let winUrl = URL.createObjectURL(
+				new Blob([winHtml], { type: "text/html" })
+		);
+
+		this.window = window.open(
+			winUrl,
+			"win"+rs,
+		`width=800,height=400,screenX=200,screenY=200;modal=yes`
+		);
+
+	     this.window.onload = function() {
+
+		 let d = $(self.window.document.getElementById(rs));
+		 d.append(div)
+
+	    }
+    }
+}
 
 
 
 
 
-export {MLVRingChart,MLVScatterPlot,MLVBarChart,MLVChart,FilterPanel,AddChartDialog,ColorByDialog};
+
+
+
+export {MLVRingChart,WGLScatterPlot,MLVScatterPlot,MLVBarChart,MLVChart,FilterPanel,AddChartDialog,ColorByDialog,WGLChart,groupAndOrder,MLVChartDialog,MLVDCChart,MLVColorLegend,findMinMax};
 
 

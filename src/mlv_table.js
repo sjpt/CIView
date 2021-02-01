@@ -133,12 +133,14 @@ class MLVTable{
        
         
         this.data_view=data_view?data_view:new MLVDataView();
-        columns=this.parseColumns(columns,options);
+        this.parseColumns(columns,options);
+       
         
 
        
       
         this.grid= new SlickGrid("#"+element_id,this.data_view,columns,options);
+        this.buildColumnOrder();
         //need to show any filter icons
 
 
@@ -177,8 +179,20 @@ class MLVTable{
                self.updateGroupPanel();
           
        });
-           this.grid.onColumnsReordered.subscribe(function(e, args){
-               self.updateGroupPanel();
+           this.grid.onColumnsReordered.subscribe(function(e, args,c){
+               self.buildColumnOrder();
+          
+       });
+        this.grid.onColumnsResized.subscribe(function(e, args){
+             
+             
+             
+                   let cols= this.getColumns();
+                   for (let c of cols){
+                     self.column_index[c.field].width=c.width;
+                  }
+            
+
           
        });
 
@@ -188,6 +202,70 @@ class MLVTable{
 
     destroy(){
         $(window).off("resize."+this._name);
+    }
+
+    sortTable(sort_cols){
+        this.data_view.sortData(sort_cols);
+
+        let sc=[];
+        for (let c of sort_cols){
+            sc.push({sortAsc:c.sortAsc,columnId:c.sortCol.id})
+        }
+         this.grid.setSortColumns(sc);
+         this.grid.invalidate();
+         this.grid.render();
+         let vp = this.grid.getViewport();
+         this.listeners.sort_listener.forEach((func)=>{func(vp.top,vp.bottom)});
+    }
+
+    getColumnLayout(){
+        let cols =  this.grid.getColumns();
+        let col_info={};
+        let groups= this.column_groups;
+        let widths={};
+        for (let n in this.column_index){
+            widths[n]=this.column_index[n].width;
+        }
+        let order=[];
+        for (let c of cols){
+            order.push(c.field);
+        }
+        return {
+            groups:groups,
+            order:order,
+            widths:widths
+        }
+    }
+
+
+    setColumnLayout(layout){
+
+    }
+
+
+
+    getSortColumns(){
+        let cols = this.grid.getSortColumns();
+        let all_cols = this.grid.getColumns();
+        let ret_cols=[];
+        for (let c of cols){
+            let t_c = all_cols[this.grid.getColumnIndex(c.columnId)];
+            if (!t_c){
+                continue;
+            }
+            ret_cols.push({
+                sortCol:{
+                    datatype:t_c.datatype,
+                    name:t_c.name,
+                    field:t_c.field,
+                    id:t_c.id
+                },
+                sortAsc:c.sortAsc
+            })
+        }
+        return ret_cols;
+
+
     }
 
 
@@ -337,8 +415,11 @@ class MLVTable{
 
     parseColumns(columns,options){
         let self = this;
+        this.column_index={};
         this.column_groups={};
+
         for (let column of columns){
+            this.column_index[column.field]=column;
 
             if (column.columnGroup){
                 let gr = this.column_groups[column.columnGroup];
@@ -424,27 +505,13 @@ class MLVTable{
         }
 
         
-        this.hidden_columns={};
-        let has_hidden_columns=false;
-        for (let column of columns){
-            let cg = this.column_groups[column.columnGroup];
-            if (cg && cg.master_column){
-                if (!column.master_group_column){
-                    this.hidden_columns[column.field]=column
-                }
-
-            }     
-        }
-        let display_columns=[]
-        for (let column of columns){
-            if (!this.hidden_columns[column.field]){
-                display_columns.push(column);
-            }
-        }
-
+    
         
 
-
+	  if (options.has_column_groups){
+		this.has_column_groups=true;
+           delete options.has_column_groups;
+	  }
 
 
         if (this.has_column_groups){
@@ -453,95 +520,238 @@ class MLVTable{
               options.preHeaderPanelHeight =23;     
         }
 
-        return display_columns;
+       
  
 
     }
 
-    expandCollapseGroup(group_name){
-        let group = this.column_groups[group_name];
-        let columns = this.grid.getColumns();
-        let new_columns=[];
-        if (!group.expanded){
-            let index=0;
-            for (let column of columns){
-                new_columns.push(column);
-                index++;
-                if (column.field===group.master_column){
-                    break;
+
+
+    setColumnLayout(layout){
+        for (let cn  in layout.widths){
+            if (this.column_index[cn]){
+                this.column_index[cn].width=layout.widths[cn];
+            }
+        }
+        this.column_groups=layout.groups;
+        let cs= this.grid.getColumns();
+        let cols=[];
+        for (let n of layout.order){
+            cols.push(this.column_index[n]);
+        }
+        this.grid.setColumns(cols);
+        this.buildColumnOrder();
+     
+    } 
+
+
+    buildColumnOrder(extra_cols,delete_cols){
+        if (!this.has_column_groups){
+            return;
+        }
+        let cols = this.grid.getColumns();
+        //get the order from the grid
+        if (!(extra_cols) && !(delete_cols)){
+            let col_orders=[];
+            for (let g in this.column_groups){
+                col_orders[g]=[];
+            }
+
+
+           
+            for (let c of cols){
+                if (c.columnGroup && !c.master_group_column){
+                    col_orders[c.columnGroup].push(c.field)
+                }
+            }
+
+            for (let g in col_orders){
+                if (col_orders[g].length>0){
+                    this.column_groups[g].columns=col_orders[g];
                 }
 
             }
-            for (let field of group.columns){
-                new_columns.push(this.hidden_columns[field]);
+        }
+        let already_groups={};
+      
+        let new_order = [];
+        for (let c of cols){
+           
+            let gr = c.columnGroup;
+            if (gr){
+                if (already_groups[gr]){
+                    continue;
+                }
+                let g= this.column_groups[gr];
+                if (!g){
+                    continue;
+                }
+                if (g.master_column){
+                    new_order.push(this.column_index[g.master_column]);
+                }
+                if (g.expanded || !(g.master_column)){
+                    for (let f of g.columns){
+                        new_order.push(this.column_index[f]);
+                    }
+                        
+                }
+                already_groups[gr]=true;
             }
-            for (let i=index;i<columns.length;i++){
-                new_columns.push(columns[i]);
+            else{
+                if (delete_cols && delete_cols.indexOf(c.field)!==-1){
+                    continue
+                }
+                else{
+                    new_order.push(c);
+                }
+               
             }
-          
+
 
         }
-        else{
-
-            for (let column of columns){
-                if (group.columns.indexOf(column.field)===-1){
-                    new_columns.push(column);
+        for (let g in this.column_groups){
+            if (!already_groups[g]){
+                let gr = this.column_groups[g];
+                if (gr.master_column){
+                    new_order.push(this.column_index[gr.master_column]);
+                }
+                if (gr.expanded || !(gr.master_column)){
+                    for (let f of gr.columns){
+                        new_order.push(this.column_index[f]);
+                    }
+                        
                 }
             }
-
-            
         }
-         this.grid.setColumns(new_columns);
-         group.expanded=!group.expanded;
-         this.updateGroupPanel();
+        if (extra_cols){
+            for (let c of extra_cols){
+                new_order.push(c);
+            }
+        }
+        this.grid.setColumns(new_order);
+        this.updateGroupPanel();
+        this._updateFilterIcons()
 
     }
 
-    addColumns(cols){
+    expandCollapseGroup(group_name){
+        let g=  this.column_groups[group_name];
+        g.expanded=!g.expanded;
+        this.buildColumnOrder();
+       
+    }
+
+    removeColumns(fields){
+        let delete_fields=[];
+        for (let f of fields){
+            let c= this.column_index[f];
+            if (!c){
+                continue;
+            }
+            if (c.columnGroup){
+                let g = this.column_groups[c.columnGroup];
+                if (c.master_group_column){
+                    g.master_column="__replace"
+                }
+                else{
+                    g.columns.splice(g.columns.indexOf(f),1);
+                }
+            }
+            else{
+                delete_fields.append(f)
+            }
+       }
+       let g_delete=[];
+       for (let g in this.column_groups){
+           let gr = this.column_groups[g];
+           if (gr.master_column==="__replace"){
+               if (gr.columns.length===0){
+                   g_delete.push(g)
+               }
+               else{
+                   gr.master_column=gr.columns[0];
+                   this.column_index[gr.columns[0]].master_group_column=true;
+                   gr.columns.splice(0,1);
+               }
+           }
+           else if (gr.columns.length===0 && !(gr.master_column)){
+               g_delete.push(g);
+           }
+
+       }
+       for (let g of g_delete){
+           delete this.column_groups[g];
+       }
+       let needs_filtering=false;
+       let filters=[];
+       for (let f of this.data_view.filters){
+            if (fields.indexOf(f.field)){
+                if (f.active){
+                    needs_filtering=true;
+                } 
+            }
+            else{
+                filters.push(f)
+            }
+        }
+
+        this.data_view.filters=filters;
+        for (let f of fields){
+            delete this.column_index[f];
+        }
+        this.buildColumnOrder(null,delete_fields);
+      
+     
+      
+   
+        if (needs_filtering){
+            this.data_view.filterData();
+            this.grid.invalidate();
+        }
+       
+
+       
+      
+    }
+
+    addColumns(cols,collapse){
         let new_groups={};
+        let extra_cols=[];
         for (let column of cols){
-          if (!column.id){
-              column.id=column.field;
-          }
-          if(column.filterable){
-            this.data_view.addFilter(column);
-          }
-          if (column.columnGroup){
+            if (this.column_index[column.field]){
+                continue;
+            }
+            if (!column.id){
+                column.id=column.field;
+            }
+            if(column.filterable){
+                this.data_view.addFilter(column);
+            }
+            if (column.columnGroup){
                 let gr = this.column_groups[column.columnGroup];
-               new_groups[column.columnGroup]=true;
+                new_groups[column.columnGroup]=true;
                 if (!gr){
-                     
-                    gr = {columns:[]};
+                    gr= {columns:[],expanded:!collapse}
                     this.column_groups[column.columnGroup]=gr;
                 }
-
-        
-              
+          
                 if (column.master_group_column){
                     gr.master_column=column.field;
-                    gr.expanded=true;
+                    
                 }
                 else{
                     gr.columns.push(column.field)
                 }
+               
             }
+            else{
+                extra_cols.push(column);
+            }
+            this.column_index[column.field]=column;
+            
         }
-        for (let column of cols){
-            let cg = this.column_groups[column.columnGroup];
-            if (cg && cg.master_column){
-                if (!column.master_group_column){
-                    this.hidden_columns[column.field]=column
-                }
-
-            }     
-        }
-
-        let gr = this.grid.getColumns();
-        gr = gr.concat(cols);
-        this.grid.setColumns(gr);
-       for (let gr in new_groups){
-            this.expandCollapseGroup(gr)
-        }
+        this.buildColumnOrder(extra_cols);
+      
         
     }
 
@@ -726,22 +936,16 @@ class MLVTable{
     }
 
     showSortDialog(){
-        let cols = {};
-        let self = this;
-        for (let col of this.grid.getColumns()){
-            if (col.sortable){
-                cols[col.id]={name:col.name,field:col.field,datatype:col.datatype};
+        let cols=[];
+        let self =this;
+        for (let c of this.grid.getColumns()){
+            if (c.sortable){
+                cols.push(c);
             }
         }
-        new MLVSortDialog(this.data_view,cols,this.grid.getSortColumns(),
+        new MLVSortDialog(cols,this.getSortColumns(),
         function(sort_cols){
-            self.grid.setSortColumns(sort_cols);
-            self.grid.invalidate();
-            self.grid.render();
-            let vp = self.grid.getViewport();
-            self.listeners.sort_listener.forEach((func)=>{func(vp.top,vp.bottom)});
-           
-
+           self.sortTable(sort_cols);
         });
     }
 
@@ -785,12 +989,7 @@ class MLVTable{
 
         this.grid.onSort.subscribe(function (e, args) {
             var cols = args.sortCols;
-            self.data_view.sortData(cols);
-            self.grid.invalidate();
-            self.grid.render();
-            let vp = self.grid.getViewport();
-            self.listeners.sort_listener.forEach((func)=>{func(vp.top,vp.bottom)});
-
+            self.sortTable(cols);
           });
 
        
@@ -1165,6 +1364,12 @@ class MLVDataView extends DataView{
             integer:function sorterNumeric(a, b) {
                     a=parseFloat(a);
                     b=parseFloat(b);
+                    if (isNaN(a)){
+                        a= Number.MIN_SAFE_INTEGER;
+                    }
+                    if (isNaN(b)){
+                        b= Number.MIN_SAFE_INTEGER;
+                    }
                     return  (a === b ? 0 : (a > b ? 1 : -1));
             },      
             date:function sorterDateIso(a, b) {     
@@ -1344,10 +1549,6 @@ class FilterPanelDataView extends MLVDataView{
             self._filterByID(ids)
         });
         this.data_listener = this.addListener("data_changed",function(field){
-            let dim = self.filter_dimensions[field];
-            if (dim){
-                dim.dirty=true;
-            }
             self. filter_panel.dataChanged(field);
         })
     }
@@ -1364,38 +1565,29 @@ class FilterPanelDataView extends MLVDataView{
 
     }
 
-    filterData(){
-        let self = this;
-        for (let filter of this.filters){
-            let dim = this.filter_dimensions[filter.field];
-            //clear filter and dispose of dimension
-            if (!filter.active){
-                if (dim){
-                    dim.filter(null);
-                    dim.dispose();
-                    delete this.filter_dimensions[filter.field]
-                }
-            }
-        
-            else{
-                if (!dim){
-                    dim = this._getDimension(filter.field);
-                    this.filter_dimensions[filter.field]=dim;
-                }
-                else if(dim.dirty){
-                    //is this necessary?
-                    dim.filter(null);
-                    dim.dispose();
-                    dim =  this._getDimension(filter.field);
-                    delete dim.dirty;
-                }
 
-               
-                dim.filter(this._getFilterFunction(filter));
-            }
+        
+
+    filterData(){
+        if (!this.dim){
+            this.dim=this.filter_panel.ndx.dimension(function(d){
+                return d.id;
+            });
         }
 
-        this.filter_panel.filterChanged();
+        let i_dict={};
+        let items = this.getItems();
+
+        for (let item of items){
+           if (this._isItemFiltered(item)){
+               i_dict[item.id]=true;
+           }
+        }
+        this.dim.filter(function(d){
+            return i_dict[d];
+        }); 
+        this.filter_panel.updateDCCharts();
+        this.filter_panel._chartFiltered(this.dim.getIds());
 
     }
 
@@ -1407,18 +1599,7 @@ class FilterPanelDataView extends MLVDataView{
     */
 
     dataChanged(field){
-        for (let filter of this.filters){
-            if (filter.field===field && filter.active){
-                let dim =  this.filter_dimensions[field];
-                if (dim){
-                    dim.filter(null);
-                    dim.dispose();
-                }
-                dim = this._getDimension(field);
-                this.filter_dimensions[field]=dim
-
-            }
-        }
+        
 
     }
     
@@ -1429,19 +1610,27 @@ class FilterPanelDataView extends MLVDataView{
     * @returns {Array} - An array of data items 
     */
     getDataUnfilter(field){
-         let dim = this.filter_dimensions[field];
-         if (!dim){
-             return this.getFilteredItems();
+        let items= this.getItems();
+        let filter= null;
+        for(let f of this.filters){
+            if(field===field){
+                filter=f;
+                break;
+            }
+        }
+        
+         if (!(filter) || !(filter.active)){
+             return items ;
          }
-         dim.filter(null);
-         let items = dim.top(1000000)
-         for (let filter of this.filters){
-             if (filter.field===field){
-                 dim.filter(this._getFilterFunction(filter));
-                 break;
-             }
-         } 
-         return items;
+         filter.active=false;
+         let f_items=[];
+         for (let item of items){
+          if (this._isItemFiltered(item)){
+              f_items.push(item)
+           }
+            }
+         filter.active=true;
+         return f_items;
 
     }
 
@@ -1607,12 +1796,23 @@ class MLVDownloadDialog{
 }
 
 
+ /**
+* Creates a dialog that enables users to select fields with which to sort
+* @param {object[]} all_columns - A list of column objects which should have field, name and datatype
+* @param {object[]} sort_column - columns that are already being used to sort . A list with sortAsc and column object
+* e.g. [{sortAsc:true,column:{field:"age",name:"age",datatype:"integer"}}]
+* @param {function} callback - The function called after the user chhoses the columns 
+* It should accept list containing the sort columns (see above)
+*/
 class MLVSortDialog{
-    constructor(data_view,all_columns,sort_columns,callback){
+    constructor(all_columns,sort_columns,callback){
        this.div = $("<div>").attr("class", "mlv-sort-dialog");
-       this.data_view=data_view;
        this.all_columns = all_columns;
        this.sort_columns=sort_columns;
+       this.field_to_col={}
+       for (let c of this.all_columns){
+            this.field_to_col[c.field]=c;
+       }
        this.callback=callback;
        let buttons=[
             {
@@ -1621,8 +1821,7 @@ class MLVSortDialog{
                     let cols= this._sort();
                     if (this.callback){
                         this.callback(cols);
-                    }
-                  
+                    }               
 
                 }
             },
@@ -1637,26 +1836,23 @@ class MLVSortDialog{
             autoOpen: true, 
             buttons:buttons,
             title:"Sort",
-            width:250,
-            height:200,
+            width:300,
             close: ()=>{
                 this.div.dialog("destroy").remove();
             }
         }).dialogFix();
         this._init();
     }
-
-
     _init(){
         let self= this;
         this.div.append($("<label>").text("Columns:"));
-        this.list =$("<ul>").css({"list-style-type":"none","padding":"4px","margin":"4px"}).appendTo(this.div);
+        this.list =$("<div>").css({"padding":"4px","margin":"4px"}).appendTo(this.div);
         this.list.sortable();
         this.column_select=$("<select>").appendTo(this.div);
-        for (let id in this.all_columns){
+        for (let column of this.all_columns){
            this.column_select.append($('<option>', {
-	           value: id,
-	           text: this.all_columns[id].name
+	           value: column.field,
+	           text: column.name
 	       }));   
         }
 
@@ -1665,36 +1861,30 @@ class MLVSortDialog{
         }
 
         let add_but = $("<i>").attr("class","fas fa-plus").click(function(e){
-            let id= self.column_select.val();
-            self._addSortRecord({columnId:id,sortAsc:true});
+            let field= self.column_select.val();
+            let col = self.field_to_col[field];
+            self._addSortRecord({sortCol:col,sortAsc:true});
             self.div.css("height","100%");
         }).appendTo(this.div);
        
     }
-
-
     _sort(){
        let sort_cols=[];
        let ret_sort_cols=[];
        let self = this;
        this.list.children().each(function(e){
-           let id=$(this).data("id");
-           let col= self.all_columns[id];
+           let field=$(this).data("field");
+           let col= self.field_to_col[field];
            let order=$(this).data("order");
            sort_cols.push({sortAsc:order==="ASC",sortCol:col});
-           ret_sort_cols.push({sortAsc:order==="ASC",columnId:id});
-
+         
        })
-       this.data_view.sortData(sort_cols);
-       return ret_sort_cols;
+       return sort_cols;
     }
 
-
-
-
     _addSortRecord(rec){
-          let col = this.all_columns[rec.columnId];
-          let li = $("<li>").data("id",rec.columnId);
+          let col = rec.sortCol;
+          let li = $("<div>").css({"margin-top":"6px","margin-bottom":"6spx"}).data("field",col.field);
           let text= $("<span>").text(col.name);
           let move_handle =$("<i class='fas fa-arrows-alt-v'></i>");
           let self=this;
@@ -1711,11 +1901,12 @@ class MLVSortDialog{
           }
           let remove = $("<i class='fas fa-trash-alt'></i>").click(function(e){
               let p =  $(this).parent();
-              let id =p.data("id");
+              let field =p.data("field");
+              let c =self.field_to_col[field];
 
               self.column_select.append($('<option>', {
-	               value: id,
-	               text: self.all_columns[id].name
+	               value: field,
+	               text: c.name
 	            }));   
              p.remove();
              self.div.css("height","100%");
@@ -1725,20 +1916,12 @@ class MLVSortDialog{
           li.append(move_handle).append(text).append(select).appendTo(this.list);
           this.column_select.children().each(function(){
               let item=$(this);
-              if (item.val()===rec.columnId){
+              if (item.val()===rec.sortCol.field){
                   item.remove();
               }
           })
-
-
-
-
-
-       
-
     }
 }
-
 
 
 
@@ -1878,6 +2061,7 @@ class MLVFilterDialog{
               
                 value.autocomplete({
                     source:poss,
+                    minLength:3,
                     select:function(event,ui){
                          $(this).parent().find("input[type=checkbox]").prop("checked",true);
                          $(this).val(ui.item.value);

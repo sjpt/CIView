@@ -20,6 +20,9 @@ class MLVImageTable {
         this.columns=[];
         this.sort_columns=[];
 
+        config.background_color=config.background_color?config.background_color:"lightgray"
+        
+
 
         let im = new Image();
         im.onload=function(e){
@@ -37,12 +40,12 @@ class MLVImageTable {
       
         this.parent = parent_div;
         this.selected_tiles={};
-        this.margin=10;
+        this.margin=config.margin_size?config.margin_size:10
        
         this.cache_size=5;
 
         this.view_port = $("<div>").height(this.parent.height()).width(this.parent.width())
-                                   .css({"overflow":"auto","display":"none"}).attr("id","vpd");
+                                   .css({"overflow":"auto","display":"none","background-color":config.background_color}).attr("id","vpd");
         this.canvas = $("<div>");
         this.data_view = data_view;
         parent_div.append(this.view_port);
@@ -53,7 +56,7 @@ class MLVImageTable {
         */
         //work out canvas height
      
-        this.canvas.css({"position":"relative","background-color":" LightGray"}).click(function(e){
+        this.canvas.css({"position":"relative","background-color":config.background_color}).click(function(e){
             let img =$(e.originalEvent.srcElement);
             if (!img.attr("id")){
                 img=img.parent();
@@ -87,7 +90,12 @@ class MLVImageTable {
                     
 
                 }
-                self.listeners.image_clicked.forEach((func)=>{func(e,item,img,range)});
+            
+                if (self.show_info_box){
+                    self.showInfoBox(self.data_view.getItemById(arr[2]));
+                }
+        
+                self.listeners.image_clicked.forEach((func)=>{func(e,item,img)});
 
                 self.last_index_clicked=index;
                 if (self.tagger && self.tagger.selected_option){
@@ -101,7 +109,8 @@ class MLVImageTable {
                     if (!ids){
                        ids=[arr[2]]
                     }
-                    self.setSelectedTiles(ids,false,true);
+                   
+                    self.setSelectedTiles(ids,e.ctrlKey,true);
                 }
           
             }
@@ -109,11 +118,34 @@ class MLVImageTable {
           
         }).mouseover(function(e){
              let img =$(e.originalEvent.srcElement);
-             let id = img.attr("id");
+             let im_id = img.attr("id");
             
-             if (id){
+             if (im_id){
+                 let arr= im_id.split("-");
+                 let id =arr[2];
                  let item = self.data_view.getItemById(id);
+                 if (!item){
+                     return;
+                 }
+                
+                 
+                 if (self.image_over){
+                     //already in image
+                     if (item.id === self.image_over[0].id){
+                         return;
+                     }
+                     //move from one image to another
+                     self.listeners.image_out.forEach((func)=>{func(e,self.image_over[0],self.image_over[1])});
+                 }
                  self.listeners.image_over.forEach((func)=>{func(e,item,img)});
+                 self.image_over=[item,img]
+             }
+             //mouse out
+             else{
+                 if (self.image_over){
+                     self.listeners.image_out.forEach((func)=>{func(e,self.image_over[0],self.image_over[1])});
+                 }
+                 self.image_over=null;
              }
 
         })
@@ -139,6 +171,7 @@ class MLVImageTable {
         this.listeners={
        		"image_clicked":new Map(),
        		"image_over":new Map(),
+       		"image_out":new Map(),
        		"data_changed":new Map(),
        		"image_selected":new Map()
        	};
@@ -170,6 +203,9 @@ class MLVImageTable {
         this.dv_filter_listener= data_view.addListener("data_filtered",function(e){
             self.show();
         });
+        if (config.columns){
+            this.setColumns(config.columns);
+        }
 
 
 
@@ -183,8 +219,11 @@ class MLVImageTable {
         txt.empty();
         //txt.scrollTop(0);
         for (let col of this.columns){
+            if (col.not_display){
+                continue;
+            }
             txt.append("<span class='info-heading'>"+col.name+"</span>");
-            txt.append("<span>"+item[col.field]+"</span>");
+            txt.append("<span style='margin-left:5px'>"+item[col.field]+"</span>");
         }
         let s_top = (this.view_port.scrollTop()+2)+"px";
         this.info_box.css({width:200,top:s_top});
@@ -240,18 +279,24 @@ class MLVImageTable {
    }
 
     showSortDialog(){
-        let cols = {};
+        let cols = [];
         let self = this;
         for (let col of this.columns){
             if (col.sortable){
-                cols[col.id]={name:col.name,field:col.field,datatype:col.datatype};
+                cols.push(col)
             }
         }
-        new MLVSortDialog(this.data_view,cols,this.sort_columns,
+        new MLVSortDialog(cols,this.sort_columns,
         function(sort_cols){
-            self.sort_columns=sort_cols
-            self.show();
+            self.sortTable(sort_cols);
         });
+    }
+
+    sortTable(sort_cols){
+        this.data_view.sortData(sort_cols);
+        this.sort_cols=sort_cols;
+        this.show();
+
     }
 
     taggingStarted(tagger){
@@ -361,7 +406,7 @@ class MLVImageTable {
     		return null;
     	}
     	if (!id){
-    		id = type+"_"+listener.size
+    		id = this._getRandomString()
     	}
     	listener.set(id,func);
     	return id;
@@ -534,7 +579,7 @@ class MLVImageTable {
                 this.data_view.addFilter(column);
             }
         }
-        this.data_view.ensureIdUniqueness();
+        //this.data_view.ensureIdUniqueness();
         
     }
 
@@ -627,10 +672,7 @@ class MLVImageTable {
         this.height = this.parent.height();
         this.view_port.height(this.height).width(this.width);
         this.setImageDimensions();
-        this.show(fti)
-      
-      
-       
+        this.show(fti)     
     }
 
     _calculateTopBottomRow(first_tile_index){
@@ -671,12 +713,7 @@ class MLVImageTable {
         if (propagate){
                this.listeners.image_selected.forEach((func)=>{func(ids)});
         }
-        if (ids.length===1){
-                  if (this.show_info_box){
-                    this.showInfoBox(this.data_view.getItemById(ids[0]));
-                }
-        }
-        
+          
     }
 
     scrollToTile(image_index,select){
@@ -692,6 +729,19 @@ class MLVImageTable {
         if (select){
             this.setSelectedTiles([item.id]);
         }
+    }
+
+     _getRandomString(len,an){
+		if (!len){
+			len=6;
+		}
+    	an = an&&an.toLowerCase();
+    	let str="", i=0, min=an=="a"?10:0, max=an=="n"?10:62;
+   	 	for(;i++<len;){
+      		let r = Math.random()*(max-min)+min <<0;
+      		str += String.fromCharCode(r+=r>9?r<36?55:61:48);
+    	}
+    	return str;
     }
 
 
@@ -999,7 +1049,9 @@ class TaggingDialog{
         }
        
         return div;
-    } 
+    }
+
+
 }
 
 MLVImageTable.flip_count=0;

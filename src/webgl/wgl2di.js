@@ -18,13 +18,23 @@ class WGL2DI{
     * </ul>
     */
 	constructor(div,width,height,config){
+		width = Math.round(width);
+		height= Math.round(height);
 		var self = this;
 		if (!config){
 			config={};
 		}
 		this.config=config;
-
+		if (config.circle_borders==null){
+			this.circle_borders=true;
+		}
+		else{
+				this.circle_borders=config.circle_borders;
+		}
+		this.draw_options=config.draw_options?config.draw_options:{depth:{},blend:{}};
+		
 	
+
     
     	this.regl=null;
 		this.pick_buffer=null;
@@ -96,7 +106,7 @@ class WGL2DI{
 								primitive:"lines"});
 
 		//rectangles
-		this.rect_properties={'position':2,"color":2,"pick_color":2};
+		this.rect_properties={'position':2,"color":2,"pick_color":2,"opacity":2};
 		this.rects_to_draw={};
 		this.rects={};
 		for (var prop in this.rect_properties){     
@@ -113,7 +123,7 @@ class WGL2DI{
 
 
 		//squares
-		this.square_properties={'position':2,"color":2,"pick_color":2,side_length:2,"right_clip":1,"bottom_clip":1};
+		this.square_properties={'position':1,"color":1,"pick_color":1,"size":1,"opacity":1};
 		this.squares_to_draw={};
 		this.squares={};
 		for (var prop in this.square_properties){     
@@ -193,12 +203,17 @@ class WGL2DI{
 		regl({
 			onDone: function(err,regl){
 				self.regl=regl;
+				regl._refresh()
 				self.pickbuffer = regl.framebuffer({ colorFormat: 'rgba',height:self.height,width:self.width});
 				self._initDrawMethods();
 				self._addHandlers();
 				 
 			},
 			canvas:self.canvas[0],
+			attributes:{
+				antialias:false,
+			}
+			
 			
 
 		});
@@ -322,7 +337,7 @@ class WGL2DI{
 
 
 	_setUpDocument(width,height){
-		if (this.config.default_brush){
+		if (this.config.brush){
 			this.div_container.css("cursor","crosshair")
 		}
 		if (!height){
@@ -407,10 +422,19 @@ class WGL2DI{
 
 
 
-		
+	remove(){
+		this.pickbuffer.destroy();
+		this.regl.destroy();
+		this.canvas.attr({height:1,width:1});
+		this.canvas.remove();
+
+	}
 	
 
 	setSize(width,height){
+		if (this.height===height && this.width===width){
+			return
+		}
 		let self=this;
 		width=Math.round(width);
 		height=Math.round(height);
@@ -459,8 +483,61 @@ class WGL2DI{
 		let br = this._getActualPosition([this.width,this.height]);
 		return {
 			x_range:[tl[0],br[0]],
-			y_range:[tl[1],br[1]]
+			y_range:[tl[1],br[1]],
+			offset:[this.offset[0],this.offset[1]],
+			scale:[this.x_scale,this.y_scale]
+
 		};
+	}
+
+	highlightPoint(key){
+		clearInterval(this.an_func);
+		let obj = this.keys[key];
+		if (!obj){
+			return;
+		}
+		let pt=this.circles.position[this.objects[obj][0]];
+		this.label_context.clearRect(0, 0, this.width, this.height);
+	    this.highlight_point=pt
+		pt = this._getCanvasCoords(pt);
+		let ctx= this.label_context;
+		let self = this;
+		self.highlight_pt_radius=0.1;
+		ctx.fillStyle="orange";
+		self.an_func=setInterval(function(){
+			ctx.beginPath();
+            ctx.arc(pt[0], pt[1], self.highlight_pt_radius, 0, 2 * Math.PI);
+            ctx.fill();
+            self.highlight_pt_radius+=0.1;
+            if (self.highlight_pt_radius>(self.universal_circle_radius*self.x_scale)){
+
+            	clearInterval(self.an_func);
+            }
+		},5);
+		
+
+		
+	}
+	removeHighlightPoint(){
+		if (!this.keys["__highlight__"]){
+			return;
+		}
+		let end=this.circles.count-1;
+		for (let n in this.circle_properties){
+			this.circles[n].splice(end,1)
+		}
+		this.objects.splice(this.objects.length-1,1);
+		delete this.keys["__highlight__"];
+		this.ciecles.count--;
+		
+
+	}
+
+	_getCanvasCoords(pos){
+		let x=(pos[0]+this.offset[0])*this.x_scale;
+        let y=(pos[1]+this.offset[1])*this.y_scale;
+        return [x,y]
+
 	}
 
 	_drawLabels(){
@@ -497,6 +574,18 @@ class WGL2DI{
 		}
 	}
 
+	setObjectPosition(key,x,y){
+		var obj = this.objects[this.keys[key]];
+		if (!obj){
+			return;
+		}
+		var obj_type= this.object_types[obj[1]];
+		for (var i=obj[0];i<obj[0]+obj_type.vertices;i++){
+			obj_type.data.position[i][0]=x		
+			obj_type.data.position[i][1]=y;
+		}
+			
+	}		
 
 
 
@@ -520,23 +609,45 @@ class WGL2DI{
 
 	}
 
-	setLogPosition(axis,bool){
+	setLogPosition(axis,bool,type){
+		let neg_vals=false;
+		if (!type){
+			neg_vals=true;
+		}
 		let i=0
 		if (axis ==="y"){
 			i=1;
 		}
+		if (bool){
+			this.temp_vals={}	
+		}
+	
 		for (let obj of this.objects){
 			let obj_type=this.object_types[obj[1]];
 			let arr =  obj_type.data.position[obj[0]];
-			let m=arr[i]<0?-1:1;
-			if (bool){
-
-				arr[i]= Math.log10(Math.abs(arr[i]))*m;
-			}
-			else{
-				arr[i]=Math.pow(10,Math.abs(arr[i]))*m;
-			}
+			if (arr[i]!==0){
+				let abs = Math.abs(arr[i]);
+			    let m=arr[i]<0?-1:1;
+				if (bool){
+					if ((neg_vals && abs<1) || (!(neg_vals) && m===-1)){
+						arr.temp=arr[i];
+						arr[i]=0;
+					}
+                    else{
+					    arr[i]= Math.log10(abs)*m;
+					}
+				}
+				else{
+					if ((neg_vals && abs<1) || (!(neg_vals) && m===-1)){
+						arr[i]=arr.temp;
+						delete arr.temp
+					}else{
+					    arr[i]=Math.pow(10,abs)*m;
+				    }
+			     }
+		    }
 		}
+	
 	}
 
 
@@ -746,7 +857,10 @@ class WGL2DI{
 		this.rects.position.push([position[0]+width,position[1]+height]);
 		this.rects.position.push([position[0]+width,position[1]]);
 		this.rects.position.push([position[0],position[1]]);
-
+		for (var a=0;a<6;a++){
+			 this.rects.opacity.push(1);
+		}
+       
 
 		var c  = [color[0]/255,color[1]/255,color[2]/255];
 		var pc = this._getRGBFromIndex(index+1);
@@ -780,7 +894,7 @@ class WGL2DI{
 	}
 
 
-	addCircle(position,radius,color,key){
+	addCircle(position,radius,color,key,opacity){
 		var index = this.objects.length;
 		 if (key && ! this.keys[key]){
 			this.keys[key]=index;
@@ -792,7 +906,7 @@ class WGL2DI{
 		var circ_index=this.circles.position.length;
 		this.circles.position.push(position);
 		this.circles.radius.push(radius);
-		this.circles.opacity.push(1);
+		this.circles.opacity.push(opacity?opacity:1);
 		this.circles.color.push([color[0]/255,color[1]/255,color[2]/255]);
 		this.circles.pick_color.push(this._getRGBFromIndex(index+1));
 		this.circles.start_angle.push(10);
@@ -801,8 +915,52 @@ class WGL2DI{
 		this.circles.count++;
 	}
 
-	addPointRectangle(position,height,width,color,key){
-		var side_length= height>width?height:width;
+	removeCircle(key_list){
+		let temp_li={};
+		for (let n in this.circle_properties){
+			temp_li[n]=[]
+		}
+        
+        let keys={};
+        for (let key of key_list){
+        	keys[key]=true
+        }
+        let key_to_index={};
+		for (let obj of this.objects){
+			if (!keys[obj[2]]){
+				key_to_index[obj[0]]=obj
+			}
+
+		}	
+
+		let count=0;
+		let temp_objs=[];
+		for (let i =0;i<this.circles.count;i++){
+			let obj= key_to_index[i];
+			if (obj){
+			    for (let n in this.circle_properties){
+				    temp_li[n].push(this.circles[n][i]);
+			    }
+			    obj[0]=count;
+			    count++
+			    temp_objs.push(obj)
+
+		    }
+			   
+		 }
+		  for (let n in this.circle_properties){
+		        this.circles[n]=temp_li[n];
+		  }
+		  this.circles.count=count;
+		  setTimeout(()=>this.refresh(),0);
+		  
+
+
+
+	}
+
+	addSquare(position,color,size,key){
+		
 		var index = this.objects.length;
 		if (key && ! this.keys[key]){
 			this.keys[key]=index;
@@ -813,11 +971,10 @@ class WGL2DI{
 		}
 
 		var square_index=this.squares.position.length;
-		this.squares.position.push([position[0]+side_length/2,position[1]+side_length/2]);
+		this.squares.position.push(position);
 		this.squares.color.push([color[0]/255,color[1]/255,color[2]/255]);
-		this.squares.side_length.push(side_length);
-		this.squares.right_clip.push(width/side_length);
-		this.squares.bottom_clip.push(height/side_length);
+		this.squares.size.push(size);
+		this.squares.opacity.push(1);
 		this.squares.pick_color.push(this._getRGBFromIndex(index+1));
 		this.objects.push([square_index,3,key]);
 		this.squares.count++;
@@ -850,7 +1007,7 @@ class WGL2DI{
 	//refesh all 
 	//in_view only those in view
 	refresh(in_view){
-    	this.label_context.clearRect(0, 0, this.width, this.height);
+    	//this.label_context.clearRect(0, 0, this.width, this.height);
     	this._drawObjects(false,in_view);
     	this._drawPickBuffer(in_view);
     	this.label_context.font = "30px Arial";
@@ -876,7 +1033,8 @@ class WGL2DI{
 			count:type.vertices,
 			primitive:type.primitive,
 			is_buffer:0,
-			universal_radius:this.universal_circle_radius
+			universal_radius:this.universal_circle_radius,
+			circle_borders:this.circle_borders?1:0
 
 		};
 	
@@ -920,7 +1078,7 @@ class WGL2DI{
 		}
 		for (var i in this.object_types){
 			var type =this.object_types[i];
-			if (type[data_source].count===0){
+			if (!type[data_source].count){
 				continue;
 			}
 
@@ -945,7 +1103,8 @@ class WGL2DI{
 			   count:type[data_source].count * type.vertices,
 			   primitive:type.primitive,
 			   is_buffer:buffer?1:0,
-			   universal_radius:this.universal_circle_radius
+			   universal_radius:this.universal_circle_radius,
+			   circle_borders:this.circle_borders?1:0
 
 
 			};
@@ -992,10 +1151,89 @@ class WGL2DI{
 		}
 	}
 
+
+	orderColumns(id_to_order,pos_to_id,rows,cols){
+		  let max=rows*cols;
+            let obj_type= this.object_types[2];
+            let rp = this.rects.position;
+            let opa = this.rects.opacity;
+            let x_pos=0;
+			for (let n=0;n<max;n+=rows){
+			
+                let id = pos_to_id[n];
+                let x_pos = id_to_order[id]*2
+			
+				let st = n*6;
+				let en = st+(rows*6);
+			
+				for (let i=st;i<en;i+=6){
+
+					rp[i][0]=x_pos;
+					rp[i+1][0]=x_pos;
+					rp[i+2][0]=x_pos+2;
+					rp[i+3][0]=x_pos+2;
+					rp[i+4][0]=x_pos+2;
+					rp[i+5][0]=x_pos;
+					opa[i]=op;
+					opa[i+1]=op;
+					opa[i+2]=op;
+					opa[i+4]=op;
+					opa[i+5]=op;
+		
+				
+				}
+			}
+			
+	}
+
+
+
+	moveAndHide(ids, id_to_pos, field_order){
+          
+            let obj_type= this.object_types[2];
+            let rp = this.rects.position;
+            let opa = this.rects.opacity;
+            let x_pos=0;
+			for (let info of id_to_pos){
+
+				let op =0;
+				if (ids[info[0]] !== undefined){
+                    op=1;
+				}
+                let st = info[1]*6;
+                let en = info[2]*6;
+				
+			
+				for (let i=st;i<en;i+=6){
+
+					rp[i][0]=x_pos;
+					rp[i+1][0]=x_pos;
+					rp[i+2][0]=x_pos+2;
+					rp[i+3][0]=x_pos+2;
+					rp[i+4][0]=x_pos+2;
+					rp[i+5][0]=x_pos;
+					opa[i]=op;
+					opa[i+1]=op;
+					opa[i+2]=op;
+					opa[i+3]=op;
+					opa[i+4]=op;
+					opa[i+5]=op;
+		
+				
+				}
+				if (op===1){
+					x_pos+=2;
+				}
+			}
+			
+		}
+
+
 	filterObjects(keys,object_type){
 		if (! object_type){
 			object_type=0;
 		}
+		
 		//this.is_filtered={};
 		
 		let obj_type= this.object_types[object_type];
@@ -1058,18 +1296,21 @@ class WGL2DI{
 
 	}
 
-	hideObjects(keys,object_type){
+	hideObjects(keys,object_type,def_op){
 		if (! object_type){
 			object_type=0;
 		}
 		this.is_hidden={};
+		if (!def_op){
+			def_op=1;
+		}
 		
 		
 		let obj_type= this.object_types[object_type];
 		let vert=obj_type.vertices;
 		for(let obj of this.objects){	
 			let key =obj[2];
-			let op=1;
+	        let op=def_op;
 			let st = obj[0];
 			if (!keys[key]){
 				this.is_hidden[key]=true;
@@ -1102,6 +1343,9 @@ class WGL2DI{
 	}
 
 	_getObjectAtPosition(position){
+		if(position[1]===0){
+			return;
+		}
 		var pixel = this.regl.read({
 			x: position[0],
 			y: this.height - position[1],
@@ -1215,9 +1459,8 @@ class WGL2DI{
 
 
 		}
-		console.log("In view:"+this.objects.length+":"+new_count+":"+old_count);
-
-		console.log("time to get objects in view "+(Date.now()-time));    
+		
+		
 	}
 
 	_clearObjectsInView(){
@@ -1288,10 +1531,75 @@ class WGL2DI{
 		this.brush={origin:origin,div:div,resizing:true};
 	}
 
+	_setUpPolyBrush(pos){
+		this.poly_brush={
+			points:[pos],
+			active:true,
+		}
+		let ctx= this.label_context;
+		
+		ctx.beginPath()
+		ctx.moveTo(pos[0],pos[1]);
+	
+
+
+	}
+
+	_extendPolyBrush(pos,end){
+		let ctx= this.label_context;
+	    //let prev = this.poly_brush.points[this.poly_brush.points.length-1]
+		
+		
+		ctx.lineTo(pos[0],pos[1]);
+		ctx.stroke()
+		this.poly_brush.points.push(pos);
+		if (end){
+			ctx.closePath();
+			ctx.fillStyle="lightgray";
+			ctx.globalAlpha=0.4;
+			ctx.fill();
+			let poly = []
+			for (let pt of this.poly_brush.points){
+				poly.push(this._getActualPosition(pt));
+			}
+			for (var i in this.handlers.brush_stopped){
+			    this.handlers.brush_stopped[i](poly,true);
+		    }
+
+		}
+	}
+
+	_finishPolyBrush(pos){
+		if (this.poly_brush.points.length<4){
+			this.clearBrush();
+			return;
+		}
+		let ctx= this.label_context;	
+		ctx.closePath();
+		ctx.fillStyle="lightgray";
+		ctx.globalAlpha=0.2;
+		ctx.fill();
+		ctx.globalAlpha=1;
+		let poly = [];
+		this.poly_brush.active=false;
+		for (let pt of this.poly_brush.points){
+			poly.push(this._getActualPosition(pt));
+		}
+		for (var i in this.handlers.brush_stopped){
+			this.handlers.brush_stopped[i](poly,true);
+		}
+	}
+
+
+
 	clearBrush(){
 		if (this.brush){
 			this.brush.div.remove();
 			this.brush=null;
+		}
+		if (this.poly_brush){
+		    this.label_context.clearRect(0, 0, this.width, this.height);
+		    this.poly_brush=null;
 		}
 	}
 
@@ -1333,6 +1641,13 @@ class WGL2DI{
 				}
 				
 			}
+			if (self.poly_brush && self.poly_brush.active){
+				clearTimeout(self.poly_brush_tidmout)
+				let pt =self._getMousePosition(e);
+				self.poly_brush_timeout= setTimeout(function(){
+					self._extendPolyBrush(pt);
+				},150)
+			}
 			//is this a drag or just a click without the mouse moving
 			if (self.mouse_position &&  ! self.dragging){
 				var x_amount= (e.pageX-self.mouse_position[0]);
@@ -1343,6 +1658,7 @@ class WGL2DI{
 			}
 
 			if (self.dragging){
+				
 				var x_amount= (e.pageX-self.mouse_position[0])/self.x_scale;
 				var y_amount = (e.pageY-self.mouse_position[1])/self.y_scale;
 				if (self.object_clicked){
@@ -1375,11 +1691,14 @@ class WGL2DI{
 
 				}
 				else{
-
-					self.offset[0]+=x_amount;
+                    if (!self.config.lock_x_axis){
+			            self.offset[0]+=x_amount;
+                    }		
 					self.offset[1]+=y_amount;
 					if (!self.loop){
+						self.label_context.clearRect(0, 0, self.width, self.height);
 				self.loop = self.regl.frame(function(){
+
 				self._drawObjects(false);
 				});
 			}
@@ -1395,7 +1714,7 @@ class WGL2DI{
 				var obj = self._getObjectAtPosition(position);
 				if (obj && !self.object_mouse_over){
 					for (var i in self.handlers['object_over']){
-						self.handlers.object_over[i](obj[2]);                  
+						self.handlers.object_over[i](obj[2],e);                  
 					}
 					self.object_mouse_over=obj;
 					if (self.mouse_over_color){
@@ -1418,13 +1737,13 @@ class WGL2DI{
 				//move directly from one object to another
 				else if(obj && (obj[2]!==self.object_mouse_over[2])){
 					for (var i in self.handlers['object_over']){    
-						self.handlers.object_over[i](obj[2]);  
+						self.handlers.object_over[i](obj[2],e);  
 					}
 
 
-					for (var i in self.handlers['object_out']){
+					/*for (var i in self.handlers['object_out']){
 						self.handlers.object_out[i](self.object_mouse_over[2]);
-					}
+					}*/
 					if (self.mouse_over_color){
 						self.setObjectColor(self.object_mouse_over[2],self.object_temp_color);
 						self.object_temp_color=self.getObjectColor(obj[2]);
@@ -1441,15 +1760,30 @@ class WGL2DI{
 			}
 		});
 
+		this.div_container.mouseleave(function(evt){
+			if (self.object_mouse_over){
+				for (var i in self.handlers['object_out']){
+							self.handlers.object_out[i](self.object_mouse_over[2]);
+						}
+						self.object_mouse_over=null;
+			}
+			if (self.brush && self.brush.resizing){
+			    self._brushingStopped();
+			}
+		})
+
 	
 		this.div_container.mouseup(function(evt){
 			//just a click event - inform handlers
-			if (self.config.default_brush){
+			if (self.config.brush){
 				self.div_container.css("cursor","crosshair");
 			}
 			if (self.brush && self.brush.resizing){
 				self._brushingStopped();
 				return;
+			}
+			if (self.poly_brush && self.poly_brush.active){
+				self._finishPolyBrush();
 			}
 			if (!self.dragging){
 				if (self.object_clicked){
@@ -1495,15 +1829,16 @@ class WGL2DI{
 		this.div_container.bind('mousewheel DOMMouseScroll', function(event){
 			var position =self._getActualPosition(self._getMousePosition(event));
 		if (event.originalEvent.wheelDelta > 0 || event.originalEvent.detail < 0) {
-				self.zoom_amount+=0.05;
+				self.zoom_amount+=0.01;
 
 		}
 		else {
-				self.zoom_amount-=0.05;
+				self.zoom_amount-=0.01;
 
 			}
-
-			self.x_scale*=(1+self.zoom_amount);
+            if (!self.config.lock_x_axis){
+			    self.x_scale*=(1+self.zoom_amount);
+            }
 			self.y_scale*=(1+self.zoom_amount);
 			
 			//self.images.display_as_image=self.x_scale>0.04;
@@ -1512,6 +1847,7 @@ class WGL2DI{
 			self.offset[0]+=new_position[0]-position[0];
 			self.offset[1]+=new_position[1]-position[1];
 			if (!self.loop){
+		        self.label_context.clearRect(0, 0, self.width, self.height);
 				self.loop = self.regl.frame(function(){
 				self._drawObjects(false);
 				});
@@ -1535,7 +1871,7 @@ class WGL2DI{
 				for (let name in self.handlers.zoom_stopped){	
 					self.handlers.zoom_stopped[name](ret);
 				}
-
+                		
 				self.refresh(true);
 			}, 350));
 
@@ -1545,19 +1881,29 @@ class WGL2DI{
 				//add right click behaviour
 			}
 			//create brush
-			if ((self.config.default_brush && !(evt.shiftKey)) || (!(self.config.default_brush)&&evt.shiftKey)){
-				let t = $(evt.target)
-				if(t.hasClass("wgl2d-brush") || t.hasClass("ui-resizable-handle")){
+			if ((self.config.brush && !(evt.shiftKey)) || (!(self.config.brush)&&evt.shiftKey)){
+				let origin = self._getMousePosition(evt);
+				if (self.config.brush=="default"){
+					let t = $(evt.target)
+					if(t.hasClass("wgl2d-brush") || t.hasClass("ui-resizable-handle")){
+						return;
+					}
+					if (self.brush){
+						self.clearBrush();
+					}
+					let origin =self._getMousePosition(evt);
+					self._setUpBrush(origin);
 					return;
 				}
-				if (self.brush){
-					self.clearBrush();
+				else if (self.config.brush==="poly"){
+				    if(self.poly_brush){
+			    	    self.clearBrush();
+			        }
+			        self._setUpPolyBrush(origin)		    
+			        return;
 				}
-				let origin =self._getMousePosition(evt);
-				self._setUpBrush(origin);
-				return;
-				
 			}
+		
 			if (evt.shiftKey){
 				self.div_container.css("cursor","move");
 			}
@@ -1583,12 +1929,16 @@ class WGL2DI{
 
 
 		this.__drawCircles = this.regl({
+			depth:self.draw_options.depth,
+	        blend:self.draw_options.blend,
+	
 			frag: 
 				 'precision highp float;\n\
 			varying vec3 fragColor;\n\
 			varying float op;\n\
 			varying float s_angle;\n\
 			varying float e_angle;\n\
+			varying float has_border;\n\
 			void main(){\n\
 							float r = 0.0;\n\
 							vec2 cxy = 2.0 * gl_PointCoord - 1.0;\n\
@@ -1602,7 +1952,7 @@ class WGL2DI{
 									float angle=0.0;\n\
 									angle =atan(cxy[1],cxy[0]);\n\
 									if (angle>s_angle && angle < e_angle){\n\
-										if(r>0.75){\n\
+										if(r>0.75 && has_border==1.0){\n\
 											gl_FragColor=vec4(0.1,0.1,0.1,op);\n\
 										}\n\
 										else{\n\
@@ -1614,7 +1964,7 @@ class WGL2DI{
 									}\n\
 								}\n\
 								else{\n\
-									if(r>0.75){\n\
+									if(r>0.75 && has_border==1.0){\n\
 										gl_FragColor=vec4(0.1,0.1,0.1,op);\n\
 									}\n\
 									else{\n\
@@ -1629,9 +1979,9 @@ class WGL2DI{
 			'attribute vec2 position;\n\
 			attribute vec3 color;\n\
 			attribute float opacity;\n\
-			attribute mat4 segments1;\n\
 			varying vec3 fragColor;\n\
 			varying float op;\n\
+			varying float has_border;\n\
 			attribute float start_angle;\n\
 			varying float s_angle;\n\
 			varying float e_angle;\n\
@@ -1643,6 +1993,7 @@ class WGL2DI{
 			uniform float stage_height;\n\
 			uniform float stage_width;\n\
 			uniform float universal_radius;\n\
+			uniform float circle_borders;\n\
 			vec2 normalizeCoords(vec2 position){\n\
 				float x = (position[0]+offset[0])*x_scale;\n\
 				float y = (position[1]+offset[1])*y_scale;\n\
@@ -1659,9 +2010,9 @@ class WGL2DI{
 				gl_PointSize = r*x_scale;\n\
 				fragColor = color;\n\
 				op=opacity;\n\
+				has_border=circle_borders;\n\
 				s_angle=start_angle;\n\
 				e_angle = end_angle;\n\
-				vec2 x1= log(position);\n\
 				vec2 real_position = normalizeCoords(position);\n\
 				gl_Position = vec4(real_position, 0.0, 1.0);\n\
 			}\n'
@@ -1685,7 +2036,9 @@ class WGL2DI{
 				stage_width: self.regl.prop('stage_width'),
 				stage_height: self.regl.prop('stage_height'),
 				offset:self.regl.prop("offset"),
-				universal_radius:self.regl.prop("universal_radius")
+				universal_radius:self.regl.prop("universal_radius"),
+				circle_borders:self.regl.prop("circle_borders")
+
 			},
 
 			count:  self.regl.prop('count'),
@@ -1705,30 +2058,36 @@ class WGL2DI{
 						}\n',
 
 
-				vert: '\
-						attribute vec2 position;\n\
-						attribute vec3 color;\n\
-						uniform float x_scale;\n\
-						uniform float y_scale;\n\
-						uniform vec2 offset;\n\
-						uniform float stage_height;\n\
-						uniform float stage_width;\n\
-						varying vec3 fragColor;\n\
-						vec2 normalizeCoords(vec2 position){\n\
-							float x = (position[0]+offset[0])*x_scale;\n\
-							float y = (position[1]+offset[1])*y_scale;\n\
-				return vec2(2.0 * ((x / stage_width) - 0.5),-(2.0 * ((y / stage_height) - 0.5)));\n\
-						}\n\
-						void main () {\n\
-							fragColor=color;\n\
-							vec2 norm_pos =normalizeCoords(position);\n\
-							gl_Position = vec4(norm_pos, 0.0, 1.0);\n\
-						}\n',
-
-
+				vert: `
+						attribute vec2 position;
+						attribute vec3 color;
+						attribute float opacity;
+						uniform float x_scale;
+						uniform float y_scale;
+						uniform vec2 offset;
+						uniform float stage_height;
+						uniform float stage_width;
+						varying vec3 fragColor;
+						//varying float op;
+						vec2 normalizeCoords(vec2 position){	    
+							float x = (position[0]+offset[0])*x_scale;
+							float y = (position[1]+offset[1])*y_scale;
+				            return vec2(2.0 * ((x / stage_width) - 0.5),-(2.0 * ((y / stage_height) - 0.5)));
+						}
+						void main () {
+							if (opacity==0.0){
+								return;
+							}
+							fragColor=color;
+							vec2 norm_pos =normalizeCoords(position);
+							gl_Position = vec4(norm_pos, 0.0, 1.0);
+						}`
+				,
 				attributes: {
 					position: self.regl.prop("position"),
-					color:self.regl.prop("color")
+					color:self.regl.prop("color"),
+					opacity:self.regl.prop("opacity")
+				
 
 
 				},
@@ -1752,61 +2111,54 @@ class WGL2DI{
 		this.__drawSquares = this.regl({
 			frag: 
 				 `precision highp float;
-					varying vec3 fragColor;
-					varying float r_clip;
-					varying float b_clip;
-					uniform int is_buffer;
-			void main(){
-						if (gl_PointCoord[0]>=r_clip || gl_PointCoord[1]>b_clip){
-							discard;
-							return;
-						}
-						//float r_border=b_clip*0.02;
-						//float b_border=b_clip*0.02;
-						//if (is_buffer==0  && (gl_PointCoord[0]<r_border || gl_PointCoord[0]>r_clip-r_border || gl_PointCoord[1]<b_border || gl_PointCoord[1]>b_clip-b_border)){
-						//	gl_FragColor = vec4(0.1,0.1,0.1,1);
-						//}
-						//else{
-							gl_FragColor = vec4(fragColor,1);
-						//}
-					}
+				  varying vec3 fragColor;
+				  varying float op;
+				  uniform int is_buffer;
+			      void main(){
+				      gl_FragColor = vec4(fragColor,op);
+						
+				   }`,
 
-					`,
 			vert: 
-			'attribute vec2 position;\n\
-					attribute float side_length;\n\
-					attribute vec3 color;\n\
-					attribute float right_clip;\n\
-					attribute float bottom_clip;\n\
-					varying float r_clip;\n\
-					varying float b_clip;\n\
-					uniform float x_scale;\n\
-					uniform float y_scale;\n\
-					uniform vec2 offset;\n\
-					uniform float stage_height;\n\
-					uniform float stage_width;\n\
-					varying vec3 fragColor;\n\
-			vec2 normalizeCoords(vec2 position){\n\
-							float x = (position[0]+offset[0])*x_scale;\n\
-							float y = (position[1]+offset[1])*y_scale;\n\
-				return vec2(2.0 * ((x / stage_width) - 0.5),-(2.0 * ((y / stage_height) - 0.5)));\n\
-					}\n\
-			void main() {\n\
-				gl_PointSize = side_length*x_scale;\n\
-							fragColor = color;\n\
-							r_clip=right_clip;\n\
-							b_clip=bottom_clip;\n\
-							vec2 real_position = normalizeCoords(position);\n\
-							gl_Position = vec4(real_position, 0.0, 1.0);\n\
-			}\n'
-			,
+			      `attribute vec2 position;	
+				   attribute vec3 color;
+				   attribute float opacity;
+				   attribute float size;
+				   uniform float x_scale;
+				   uniform float y_scale;
+				   uniform vec2 offset;
+				   uniform float stage_height;
+				   uniform float stage_width;
+				   uniform float universal_radius;
+				   varying vec3 fragColor;
+				   varying float op;
+			       vec2 normalizeCoords(vec2 position){
+				       float x = (position[0]+offset[0])*x_scale;
+					   float y = (position[1]+offset[1])*y_scale;
+				       return vec2(2.0 * ((x / stage_width) - 0.5),-(2.0 * ((y / stage_height) - 0.5)));
+					}
+			        void main() {
+			           if (opacity==0.0){
+			           	   return;
+			           }
+			           float s=size;
+			           if (universal_radius!=0.0){
+					       s=universal_radius;
+				       }
+				       gl_PointSize = s*y_scale;
+					   fragColor = color;
+					   op=opacity;
+					   vec2 real_position = normalizeCoords(position);
+					   gl_Position = vec4(real_position, 0.0, 1.0);
+			       }`,
 
 			attributes: {
 				position: self.regl.prop('position'),
 				color: self.regl.prop('color'),
-							side_length:self.regl.prop('side_length'),
-							right_clip:self.regl.prop("right_clip"),
-							bottom_clip:self.regl.prop("bottom_clip")
+				size:self.regl.prop('size'),
+				opacity:self.regl.prop("opacity")
+			
+							
 
 			},
 
@@ -1816,13 +2168,15 @@ class WGL2DI{
 							  stage_width: self.regl.prop('stage_width'),
 							  stage_height: self.regl.prop('stage_height'),
 							  offset:self.regl.prop("offset"),
-							  is_buffer:self.regl.prop("is_buffer")
+							  universal_radius:self.regl.prop("universal_radius")
 						  },
 
 			count:  self.regl.prop('count'),
 			primitive: self.regl.prop('primitive'),
-					framebuffer:self.regl.prop("buffer")
+			framebuffer:self.regl.prop("buffer")
 		});
+
+
 		this.object_types[3]['method']=this.__drawSquares;
 
 		this.__drawImages = this.regl({

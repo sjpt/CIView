@@ -7,6 +7,14 @@
 	border: 6px solid yellow !important;
 }
 
+.mlv-hm-label{
+	cursor:pointer
+}
+
+ .mlv-hm-label:hover{
+	color:red;
+}
+
 
 
 .image-table-info-box {

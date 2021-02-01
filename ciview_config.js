@@ -18,6 +18,7 @@ module.exports = {
 
   	module:{ 
      		rules:[
+                 //remove this, if 
      			{
         			test : /\.js/,
         			loader : 'babel-loader',
@@ -25,6 +26,7 @@ module.exports = {
                     		presets: ['es2015']
                 		}
       		},
+
 			{
 				test:/\.css$/,
           			use:[
@@ -37,8 +39,8 @@ module.exports = {
          			loader:'file-loader',
 	    			options:{
 					name:'[name].[ext]',
-					outputPath:'images',
-					publicPath:'images'
+					outputPath:'images', //the physical location of the files
+					publicPath:'images' //the url base that the code will look for the images (can be absolute or relative)
        			}
      			}
     		]

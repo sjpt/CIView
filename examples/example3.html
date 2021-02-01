@@ -1,0 +1,295 @@
+<!doctype html>
+<html>
+	<head>
+
+	</head>
+
+
+ 	<body>
+		<h2 style= "display:inline-block;margin-bottom:4px">Creating a Basic Word Cloud Chart</h2>
+		<a href="https://github.com/Hughes-Genome-Group/CIView/blob/master/ciview/examples/example3.html">View Source</a>
+		<div style="width:100%;margin-bottom:10px;width:60%">
+		    <p>In this example, a simple chart type that just lists all categories for a given field has been created.
+		    The size of the word is proportional to the number of items in that category and the words can be coloured by the average value of another field.
+		     </p>
+		    <p>
+		    In this example stats for football players (from FIFA) have been used and the word chart shows player position. If you click on GK (goal keepers),
+		    you will see that only points in the top right of the scatter plot are visible  i.e. goal keepers tend to be tall and heavy (they need to block the goal).
+		    Press 'Reset All' and select the bottom left region on the scatter plot, the words CAM.LM and RM become large i.e midfielders tend to be short and light (they
+		    need to run around a lot)
+		    </p>
+		    <p>
+		    Hover over the title of the word chart and click the pallet icon, select height from the Field drop down. Press OK and the words will change coloe.
+		    The red color of GK and CB show that Goal Keepers and Centre Backs tend to be taller.
+		    </p>
+		 </div>
+
+		<!-- The div to hold the panel -->
+		
+   	 	<div id="fpanel" style="height:500px"> </div>
+   	 
+
+		
+		<!-- only necessary for browsers which do not support es6-->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.6.15/browser-polyfill.min.js"></script>
+		<!-- contains all the js and css necessary for the browser-->
+   	 	<script src="../dist/ciview.js" ></script>
+
+		<script>
+			function setUp(data){
+			    
+				class WordListChart extends MLVChart{
+                    constructor(ndx,div,config){
+                        super(ndx,div,config);
+                        this.type="word_list_chart";
+
+                        //set the dimension for the field specified in the config
+                        this.dim = this.ndx.dimension((d)=>{return d[this.config.param]});
+                        //create a group which counts items in the dimension
+                        this.group =  this.dim.group().reduceCount();
+
+                      
+
+                        //create the div to hold the text
+                        this.text_div= $("<div>").appendTo(this.div);
+
+                        //Add a handler for the filtering
+                        //call the filter method with the word that was clicked
+                        this.text_div.click((e)=>{
+                        	this._setFilter($(event.target).text().trim());
+                        });
+                        //clear the filter when the reset button is pressed
+                        this.reset_but.click((e)=>{
+                             this._setFilter(null);
+                        });
+
+                        //some parameter (could read in config values);
+                        this.default_color="black";
+                        this.max_font_size=50;
+                        this.min_font_size=8
+
+                        //need to color the chart if specified in the config
+                        //the setColorFromConfig method reads the config and calls colorByField 
+                        if (this.config.color_by){
+                        	this.setColorFromConfig();
+                        }
+                        //as colorByField updates the view only need to call this if color is not set in config
+                        else{
+                            this._updateView();
+                        }           
+                    }
+
+                    //sets the filter with the value given
+                    _setFilter(value, not_propagate){
+                    	//remove the filter on this dimension and hide reset button
+                    	if (value == null){
+                            delete this.filter_value;
+                            this.reset_but.css("visibility","hidden");
+                            this.dim.filter(null);
+                    	}
+
+                    	//filter on this dimension and hide reset button, store filter value
+                    	else{
+                    		this.filter_value= value;
+                    		 this.reset_but.css("visibility","visible");
+                    		this.dim.filter((item)=>{
+                    			return item===value;
+                    		});                   		
+                    	}
+                    	
+                    	//braoadcast filtering to other charts
+                    	if (! not_propagate){
+                    		dc.redrawAll();
+                    		this._updateView();
+                            this.updateListener(this.dim.getIds(),this.config.id);
+                    	}
+                    }
+
+                    
+                    //get filter as an objext
+                    getFilter(){
+                    	if (this.filter_value==-null){
+                    		return [];
+                    	}
+                    	return [{
+                    		field:this.config.param,
+                    		operand:"=",
+                    		value:this.filter_value
+                    	}];
+                    }
+
+                    //Called when the container gets a reset all message
+                    //All filters are removed,then all charts are updatee, therefore the filter should not be propagated 
+                    removeFilter(){
+                    	//no filter on this chart - nothing to do
+                    	if (this.filter_value== null){
+                    		return;
+                    	}
+                    	//passsing true means the filter is not propagated to other charts 
+                    	this._setFilter(null,true);
+                    }
+
+                    //the container needs to know the datatype that the chart can be colored by
+                    //and the id of the div to attach the legend too
+                    //In this case the color for each category (word) will be calculated by the average of the given field for that categrory
+                    //hence the datatype has to be a  number
+                    getColorOptions(){
+                    	return {
+                            datatype:"number",
+                            div:this.div.attr("id")
+                    	}
+                    }
+
+                    //called by the container to color the graph by a field
+                    colorByField(info){
+                    	//updates config
+                    	super.colorByField(info);
+                    	//remove any existing color group
+                    	if (this.color_group){
+                        	this.color_group.dispose();
+                        }
+                        //if info is null, remove all colors, in this case just remove the color group
+                    	if (!info){
+                    		delete this.color_group;
+                    	}
+                    	//info.column.field contains the field name with which to color by
+                    	//A group is created on this dimension, which sums the values of thi color field for each category
+                    	//the color function (info.func), which returns an rgb color based on the field's value, is also stored
+                    	else{
+                            this.color_group =this.dim.group().reduceSum((d)=>{return d[info.column.field]});
+                            this.color_group.color_func = info.func;
+
+                    	}
+                    	//update the view which will color the chart
+                        this._updateView();
+                    }
+
+                     //called when an external filter is added 
+                     //In this case. no need to to anything but update the view as the view is generated based
+                     //on the crossfilter object.
+                    //The unusued id parameter  contains an object (dictionary) of all the remaining items
+                    //with id as keys and items as values
+                    _hide(ids,length){
+                    	this._updateView();
+                    }
+
+                    setSize(x,y){
+					    super.setSize(x,y);
+						//N.B use this.height and this.width to get the size as
+						//these values take into consideration the space taken up by the title
+						//could adjust min and max font size based on width and height
+						//however the words already wrap as the chart size is adjusted
+					}
+
+
+                    //clean up any resources
+				    remove(){
+				    	//remove any filters
+                        this.dim.filter(null);
+                        //get info about what is left
+                        let left  = this.dim.getIds();
+                        this.dim.dispose();
+                        this.group.dispose();
+                        if (this.color_group){
+                        	this.color.group.dispose();
+                        }
+                        //need to return information 
+                        return left;
+                    }	
+                    
+
+                    //redraws the graph
+                    _updateView(){
+                    	//just clear everthing and restart
+                    	this.text_div.empty();
+                    	//get category count values
+                    	let counts = this.group.all();
+                    	//work out the max count value
+                    	let max=0;
+                    	for (let d of counts){
+                            max= Math.max(max,d.value);
+                           
+                    	}
+                    	if (max===0){
+                    		return;
+                    	}
+                    	//get the totals of the color field for each category (or null if color field is not set)
+                    	let colors = this.color_group?this.color_group.all():null;
+                    	
+                    	//traverse both the count and color total arrays
+                    	for (let i=0;i<counts.length;i++){
+                    		//work out appropraite font size based on the count
+                    		let count =counts[i];
+                    		let fs= count.value/max * this.max_font_size;
+                    		fs = Math.round(fs);
+                    		if (fs===0){
+                    			continue;
+                    		}
+                    		fs=fs<this.min_font_size?this.min_font_size:fs;
+                    	
+
+                    		//work out the color
+                    		let color = this.default_color;
+                            //work out the color based on  the average color field value for that catergory (id a color field is set)
+                    		if (colors){
+                    			let average = colors[i].value/count.value
+                                color = this.color_group.color_func(average);
+                    		}
+
+                    		let opacity=1;
+                    		//if a filter exists, make the unfiltered categories(words) opaque
+                    		if (this.filter_value && !(this.filter_value===count.key)){
+                    			opacity=0.4;
+                    		}
+
+                            //add the category name with the correct size,color and opacity 		
+                            this.text_div.append(`<span style="cursor:pointer;font-size:${fs}px;color:${color};opacity:${opacity}">${count.key} </span>`);
+                    	}      	 
+                    }
+                }
+
+                //register the chart
+                MLVChart.chart_types["word_list_chart"]={
+                    "class":WordListChart,
+                    name:"Word List Chart",
+                    //specify which type of fields the chart is created from
+                    params:[{name:"Category",type:"text"}],
+                }
+
+                //Add the filter panel to the DOM
+
+                //specify the fields we want to expose
+                var columns=[
+				    {field:"position",name:"Position",datatype:"text"},
+				    {field:"height",name:"Height(inches)",datatype:"integer"},
+				    {field:"weight",name:"Weight(lbs)",datatype:"integer"}
+				];
+
+				//add the filter panel
+				var fp = new FilterPanel("fpanel",data,{menu_bar:true,columns:columns});
+
+                //add the new chart with the postion field
+                fp.addChart({
+                	type:"word_list_chart",param:"position"
+                });
+
+                //add another chart so we can see the effect of filtering on the new chart type			
+				fp.addChart({
+					type:"wgl_scatter_plot",
+					param:["height","weight"]
+
+				});
+			
+			}
+
+
+
+
+			//load the data (take from https://www.kaggle.com/)
+			$.ajax({
+				dataType:"json",
+				url:"data/fifa_all.json"
+			}).done(setUp);
+		</script>
+ 	 </body>
+</html>

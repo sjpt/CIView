@@ -31,7 +31,8 @@ function crossfilter() {
     allFiltered: allFiltered,
     onChange: onChange,
     isElementFiltered: isElementFiltered,
-    getOriginalData:getOriginalData
+    getOriginalData:getOriginalData,
+    getItemById:getItemById
   };
 
   var data = [], // the records
@@ -39,15 +40,22 @@ function crossfilter() {
       filters, // 1 is filtered out
       filterListeners = [], // when the filters change
       dataListeners = [], // when data is added
-      removeDataListeners = [], // when data is removed
+      removeDataListeners = [], 
+      id_index={},// when data is removed
       callbacks = [];
 
   filters = new xfilterArray.bitarray(0);
+
+ 
 
   // Adds the specified new records to this crossfilter.
   function add(newData) {
     var n0 = n,
         n1 = newData.length;
+
+    for (let item of newData){
+        id_index[item.id]=item;
+     }
 
     // If there's actually new data to add�
     // Merge the new data into the existing data.
@@ -65,6 +73,10 @@ function crossfilter() {
 
   function getOriginalData(){
       return data;
+  }
+
+  function getItemById(id){
+      return id_index[id];
   }
 
   // Removes all records that match the current filters, or if a predicate function is passed,
@@ -682,9 +694,9 @@ function crossfilter() {
           
       
       while (--i >= lo0) {
-        if (filters.zero(j = index[i])) {	
-            ids[data[j].id]=data[j];
-            count++;
+        if (filters.zero(j = index[i])) {     
+                ids[data[j].id]=data[j];
+                count++;
         }
       }
 
@@ -696,6 +708,7 @@ function crossfilter() {
 		      count++;   
           }
         }
+        count =Object.keys(ids).length;
       }
       return {items:ids,count:count};
     }

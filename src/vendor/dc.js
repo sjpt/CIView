@@ -11842,6 +11842,59 @@ dc.heatMap = function (parent, chartGroup) {
                 // and other elements are variable, so we need to exit them! Variable
                 // elements also fade in and out.
 
+                  if (renderDataPoints) {
+                    if (pointsToDraw){
+                        pointIndices=[0];
+                        d=[pointsToDraw[i]];
+                        dataOpacity=1;
+                        dataRadius=6;
+                        box.style('fill-opacity', 0.3);
+
+                    }
+                    var point = g.selectAll('circle.data')
+                        .data(pointIndices);
+
+                    point.enter().insert('circle', 'text')
+                        .attr('class', 'data')
+                        .attr('r', dataRadius)
+                        .attr('cx', function () {
+                            var fudge= pointsToDraw?0.5:Math.random();
+                            return Math.floor(fudge *
+                            (width * dataWidthPortion) +
+                            1 + ((width - (width * dataWidthPortion)) / 2)); })
+                        .attr('cy', function (i) { return x0(d[i]); })
+                        .style('opacity', 1e-6)
+                        .transition()
+                        .duration(duration)
+                        .delay(delay)
+                        .attr('cy', function (i) { return x1(d[i]); })
+                        .style('opacity', dataOpacity);
+
+                    if (renderTitle) {
+                        point.selectAll('title').remove();
+                        point.append('title').text(function (i) { return d[i]; });
+                    }
+
+                    point.transition()
+                        .duration(duration)
+                        .delay(delay)
+                        .attr('cx', function () {
+                             var fudge= pointsToDraw?0.5:Math.random();
+                             return Math.floor(fudge *
+                            (width * dataWidthPortion) +
+                            1 + ((width - (width * dataWidthPortion)) / 2)); })
+                        .attr('cy', function (i) { return x1(d[i]); })
+                        .style('opacity', dataOpacity);
+
+                    point.exit().transition()
+                        .duration(duration)
+                        .delay(delay)
+                        .attr('cy', 0)
+                        .style('opacity', 1e-6)
+                        .remove();
+
+                }
+
                 // Update center line: the vertical line spanning the whiskers.
                 var center = g.selectAll('line.center')
                     .data(whiskerData ? [whiskerData] : []);
@@ -12006,58 +12059,7 @@ dc.heatMap = function (parent, chartGroup) {
                 }
 
                 // Update Values
-                if (renderDataPoints) {
-                    if (pointsToDraw){
-                        pointIndices=[0];
-                        d=[pointsToDraw[i]];
-                        dataOpacity=1;
-                        dataRadius=6;
-                        box.style('fill-opacity', 0.3);
-
-                    }
-                    var point = g.selectAll('circle.data')
-                        .data(pointIndices);
-
-                    point.enter().insert('circle', 'text')
-                        .attr('class', 'data')
-                        .attr('r', dataRadius)
-                        .attr('cx', function () {
-                            var fudge= pointsToDraw?0.5:Math.random();
-                            return Math.floor(fudge *
-                            (width * dataWidthPortion) +
-                            1 + ((width - (width * dataWidthPortion)) / 2)); })
-                        .attr('cy', function (i) { return x0(d[i]); })
-                        .style('opacity', 1e-6)
-                        .transition()
-                        .duration(duration)
-                        .delay(delay)
-                        .attr('cy', function (i) { return x1(d[i]); })
-                        .style('opacity', dataOpacity);
-
-                    if (renderTitle) {
-                        point.selectAll('title').remove();
-                        point.append('title').text(function (i) { return d[i]; });
-                    }
-
-                    point.transition()
-                        .duration(duration)
-                        .delay(delay)
-                        .attr('cx', function () {
-                             var fudge= pointsToDraw?0.5:Math.random();
-                             return Math.floor(fudge *
-                            (width * dataWidthPortion) +
-                            1 + ((width - (width * dataWidthPortion)) / 2)); })
-                        .attr('cy', function (i) { return x1(d[i]); })
-                        .style('opacity', dataOpacity);
-
-                    point.exit().transition()
-                        .duration(duration)
-                        .delay(delay)
-                        .attr('cy', 0)
-                        .style('opacity', 1e-6)
-                        .remove();
-
-                }
+              
 
 
 
@@ -12309,7 +12311,7 @@ dc.boxPlot = function (parent, chartGroup) {
     var _box = d3.box();
     var _tickFormat = null;
     var _renderDataPoints = false;
-    var _dataOpacity = 0.3;
+    var _dataOpacity = 0.7;
     var _dataWidthPortion = 0.8;
     var _showOutliers = true;
     var _boldOutlier = false;
