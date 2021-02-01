@@ -1,9 +1,9 @@
 # CIView
 
-CiView is a way of looking a multi-variate data and quickly visualizing the effect that each parameter has on the dataset as a whole. Able to to work with upto a million data items, it allows homing in and visualizing smaller subsets. It is based on three main components
-* [filter panel](https://github.com/Hughes-Genome-Group/CIView/wiki/Filter-Panel) based upon dc charts (https://dc-js.github.io/dc.js/), which in turn used d3 (https://d3js.org/) and crossfilter(https://square.github.io/crossfilter/) houses interactive graphs. Users can add and customize graphs to best visulaize and manpiulate the data. The default scatter plots have been replaced with those using webgl technology 
-* A conventional excel like table (slickgrid - https://github.com/mleibman/SlickGrid) 
-* A table displaying images
+CiView is a way of looking a multi-variate data and quickly visualizing the effect that each parameter has on the dataset as a whole. It is able to work with upto a million data items and allows homing in and visualizing smaller subsets. It is based on three main components:-
+* [FilterPanel](https://github.com/Hughes-Genome-Group/CIView/wiki/Filter-Panel) - A collecion of interactive charts based upon dc charts (https://dc-js.github.io/dc.js/), which in turn uses d3 (https://d3js.org/) and crossfilter(https://square.github.io/crossfilter/). Users can add and customize graphs to best visulaize and manpiulate the data. The default scatter plots have been replaced with those using webgl technology. 
+* MLVTable - A conventional excel like table based on SlickGrid - https://github.com/mleibman/SlickGrid) 
+* ImageTable A table capable of displaying hendreds of thousands of images.
 
 ![Screen Shot](ciview.png)
 
