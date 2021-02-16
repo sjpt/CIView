@@ -23,9 +23,9 @@ class DensityScatterPlot extends WGLScatterPlot{
     	let cl=255;
 		let cat = this.config.category;   
     		for (let item of data){
-                if (item[cat.field] !== cat.value){
-				continue;
-			}
+            //     if (item[cat.field] !== cat.value){	// sjpt this gave an error ...
+			// 	continue;
+			// }
     			let x=item[this.x];
     			let y=item[this.y];
     		if (x==null || isNaN(x)|| y==null || isNaN(y)){
