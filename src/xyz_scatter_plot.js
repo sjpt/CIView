@@ -16,7 +16,7 @@ class XyzScatterPlot extends WGLScatterPlot {
     }
 
     addItems() { this.type="xyz_scatter_plot" };
-    
+
     // handle incoming crossfilter
     _filter(ids) { this.xyzobj.filter(ids); } // ???
     _hide(ids) { this.xyzobj.hide(ids); }
@@ -38,8 +38,8 @@ class XyzScatterPlot extends WGLScatterPlot {
 
         // create a XYZ object and populate it with the captured data
         /* @type {XYZ} */ 
-        let xyzobj = this.xyzobj = new GG.xyz.XYZ(undefined, 'fromMLV', true); 
-        xyzobj.useJson(this.ndx.getOriginalData());
+        let xyzobj = this.xyzobj = new GG.xyz.XYZ(this.config.data, 'fromMLV', true); 
+        if (!this.config.data) xyzobj.useJson(this.ndx.getOriginalData());
 
         // find the captured div, 
         // hide pre-made children (Martin to tidy?)
@@ -56,9 +56,9 @@ class XyzScatterPlot extends WGLScatterPlot {
         xyzobj.setField('X', cols[0], false);
         xyzobj.setField('Y', cols[1], false);
         xyzobj.setField('Z', cols[2], false);
+        xyzobj.setField('COL', cols[3], false);
         // xyzobj.setColor(this.config.color_by.column.id, false);
     
-        xyzobj.setSize(400,400);
         xyzobj.setBackground(1, 0.9, 0.9);
 
         xyzobj.setPointSize(0.01)
@@ -95,7 +95,8 @@ MLVChart.chart_types["xyz_scatter_plot"] = {
     params:[
         {name:"X",type:"number"},
         {name:"Y",type:"number"},
-        {name:"Z",type:"number"}
+        {name:"Z",type:"number"},
+        {name:"COL",type:"number"},
     ],
     // dialog:WGLScatterPlotDialog
     

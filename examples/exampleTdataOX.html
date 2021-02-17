@@ -1,4 +1,7 @@
 <!doctype html>
+<!--
+    This illustrates the use of TData style data loading.
+-->
 <html>
 	<head>
 		<style>
@@ -54,49 +57,80 @@
             import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
             init(loc);
 
-			async function setUp(data){
-			    var columns=[
-					{field:"name",name:"Name",datatype:"text",filterable:true,sortable:true},
-					{field:"club",name:"Club",datatype:"text",filterable:true,sortable:true},
-				    {field:"position",name:"Position",datatype:"text",filterablble:true,sortable:true},
-				    {field:"value",name:"Value(M)",datatype:"double",filterable:true,sortable:true},
-				    {field:"foot",name:"Preferred Foot",datatype:"text",filterable:true,sortable:true},
-				    {field:"height",name:"Height(inches)",datatype:"integer",filterable:true,sortable:true},
-				    {field:"weight",name:"Weight(lbs)",datatype:"integer",filterable:true,sortable:true}
-				];
+			let testyaml = "../examples/data/fromMLV.yaml";
+            testyaml = ',,/,,/,,/,,/BigPointData/cytof/cytof_1.5million_anonymised.txt.yaml'
+            testyaml = ',,/,,/,,/,,/BigPointData/fromMLV/fromMLV.yaml'
 
+			async function setUp(ydata){
                 await awaitGGLoaded();
 
-				var fp = new FilterPanel("panel",data,{menu_bar:true,columns:columns});
+                window.tdata = new GG.tdata.TData(ydata, testyaml);
+                window.data = tdata.makeProxy();
+                await tdata.lazyLoadCol('id');
 
-                fp.addChart({
+                // // for cytof
+			    // var columns=[
+				// 	{field:"X",name:"X",datatype:"double",filterable:true,sortable:true},
+				// 	{field:"Y",name:"Y",datatype:"double",filterable:true,sortable:true},
+				// 	{field:"Z",name:"Z",datatype:"double",filterable:true,sortable:true},
+				// 	{field:"cd3",name:"cd3",datatype:"double",filterable:true,sortable:true},
+				// 	{field:"cd4",name:"cd4",datatype:"double",filterable:true,sortable:true},
+				// 	{field:"cd8",name:"cd8",datatype:"double",filterable:true,sortable:true},
+				// ];
+
+    			var columns=[
+				    {field:"field10",name:"field10",datatype:"double",filterable:true,sortable:true},
+				    {field:"field11",name:"field11",datatype:"double",filterable:true,sortable:true},
+				    {field:"field12",name:"field12",datatype:"double",filterable:true,sortable:true},
+				    {field:"field13",name:"field13",datatype:"double",filterable:true,sortable:true}
+                ]
+
+
+				window.fp = new FilterPanel("panel",data,{menu_bar:true,columns:columns});
+				async function addChart(x) {
+                    // make sure all the data it needs will be ready
+                    // in future, we could allow charts that accepted the incremental nature of lazyload
+                    let p = x.param;
+                    if (typeof p === 'string') p = [p];
+                    const pp = [];
+                    for (const k of p) {
+                        pp.push(tdata.lazyLoadCol(k));
+                    }
+                    await Promise.all(pp);
+
+					fp.addChart(x);
+				}
+
+                // note: as addChart is async these may get done in arbitrary order
+                // depending how quickly the different columns get lazy loaded.
+                // to enforce a required order, use 'await addChart'
+                addChart({
+					title:"xyz_scatter_plot",
+					type:"xyz_scatter_plot",
+					param:["field17", "field20", "field19", "field8"],
+                    data: tdata // later ? ndx could know
+				});
+                
+				addChart({
+					title:"wgl_scatter_plot",
+					type:"wgl_scatter_plot",
+					param:["field17", "field20"],
+				});
+/**
+				addChart({
 					title:"density_scatter_plot",
 					type:"density_scatter_plot",
 					param:["height","weight"],
 				});
 
-                              
-                fp.addChart({
-					title:"xyz_scatter_plot",
-					type:"xyz_scatter_plot",
-					param:["height","weight","weight"],
-				});
-
-                
-				fp.addChart({
-					title:"wgl_scatter_plot",
-					type:"wgl_scatter_plot",
-					param:["height","weight"]
-				});
-
-			
-				fp.addChart({
+		
+				addChart({
 					type:"bar_chart",
 					param:"overall",
 					title:"Overall Score"
 				});
 
-				fp.addChart({
+				addChart({
 					type:"bar_chart",
 					param:"value",
 					title:"Value(M)",
@@ -104,30 +138,28 @@
 					bin_number:20
 				});
 
-				fp.addChart({
+
+				addChart({
 					type:"box_plot",
 					param:["foot","overall"],
 					title:"Preferred Foot vs. Skill"
 				});
-				
-				fp.addChart({
+
+				addChart({
 					type:"row_chart",
 					param:"position",
 					cap:15
-
 				})
+**/                
 	
+				panel.style.height = '';
 			
 			}
 
-
-
-
 			//load the data (take from https://www.kaggle.com/)
-			$.ajax({
-				dataType:"json",
-				url:"data/fifa_all.json"
-			}).done(setUp);
+            $.ajax({
+                url:testyaml
+            }).done(setUp);
 		</script>
  	 </body>
 </html>
