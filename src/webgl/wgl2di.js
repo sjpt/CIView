@@ -1711,7 +1711,11 @@ class WGL2DI{
 			//no drag event going on call any listners if mouse over/out an object
 			else{
 				var position =self._getMousePosition(e);
-				var obj = self._getObjectAtPosition(position);
+				try {	// patch sjpt. real problem is that _getMousePosition can return out of range values, but it's logic looks OK.
+					var obj = self._getObjectAtPosition(position);
+				} catch {
+					obj = null;
+				}
 				if (obj && !self.object_mouse_over){
 					for (var i in self.handlers['object_over']){
 						self.handlers.object_over[i](obj[2],e);                  
