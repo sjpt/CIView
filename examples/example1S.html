@@ -70,18 +70,21 @@
 				var fp = new FilterPanel("panel",data,{menu_bar:true,columns:columns});
 
                 fp.addChart({
+					title:"density_scatter_plot",
 					type:"density_scatter_plot",
 					param:["height","weight"],
 				});
 
                               
                 fp.addChart({
+					title:"xyz_scatter_plot",
 					type:"xyz_scatter_plot",
 					param:["height","weight","weight"],
 				});
 
                 
 				fp.addChart({
+					title:"wgl_scatter_plot",
 					type:"wgl_scatter_plot",
 					param:["height","weight"]
 				});
