@@ -16,6 +16,8 @@
          <link rel="stylesheet" type="text/css" href="../css/dc.min.css">
          <link rel="stylesheet" type="text/css" href="../css/gridstack.css">
          <link rel="stylesheet" type="text/css" href="../css/ciview.css">
+
+		 <link rel="stylesheet" type="text/css" href="../../xyz/xyz.css">
  
 	</head>
 
@@ -31,6 +33,13 @@
 		
    	 	<div id="panel" style="height:500px;padding:10px" > </div>
    	 
+		<script>lastModified={}; lastModified.xyzhtml = `Last modified: 2021/02/18 20:11:43
+			`
+			var GG = {};
+			GG.starttime = Date.now();
+			colourpick = {value: 99};
+		</script>
+	
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script> 
         <!-- <script src="../src/vendor/jquery.min.js"></script> -->
 		<script src="../src/vendor/jquery-ui.min.js"></script>
@@ -42,10 +51,20 @@
 		<!-- contains all the js and css necessary for the browser-->
 
 		<!-- non-module files needed by xyzviewer -->
-		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/three121.js"></script>
+		<!-- <script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/three121.js"></script>
 		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/stats.min.js"></script>
 		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/js-yaml.js"></script>
-		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/math.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/math.js"></script> -->
+		<script src="../../xyz/jsdeps/three121.js"></script>
+		<script src="../../xyz/jsdeps/stats.min.js"></script>
+		<script src="../../xyz/jsdeps/js-yaml.js"></script>
+		<script src="../../xyz/jsdeps/math.js"></script>
+		<script src="../../xyz/main.js"></script>
+
+        <script src="../../xyz/xyzspeech.js" type="module"></script>
+        <script>console.log('xyzspeech read, window=', window)</script>
+
+
 
 
         <!-- http://localhost:8800/,,/CIView-master/examples/example1S.html -->
@@ -55,10 +74,10 @@
             import {FilterPanel} from "../src/graphs.js";
             import {} from "../src/xyz_scatter_plot.js";
             import {} from "../src/density_scatter_plot.js";
-			let loc = 'http://localhost:8800/,,/xyz/';
-			// loc = '../..xyz/';
-            import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
-            init(loc);
+			// let loc = 'http://localhost:8800/,,/xyz/';
+			// // loc = '../..xyz/';
+            // import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
+            // init(loc);
 
 			async function setUp(data){
 			    var columns=[
@@ -71,7 +90,7 @@
 				    {field:"weight",name:"Weight(lbs)",datatype:"integer",filterable:true,sortable:true}
 				];
 
-                await awaitGGLoaded();
+                // await awaitGGLoaded();
 
 				var fp = new FilterPanel("panel",data,{menu_bar:true,columns:columns});
 
@@ -85,7 +104,7 @@
                 fp.addChart({
 					title:"xyz_scatter_plot",
 					type:"xyz_scatter_plot",
-					param:["height","weight","weight"],
+					param:["height","weight","value", "foot" ],
 				});
 
                 
