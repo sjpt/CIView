@@ -1,6 +1,7 @@
 <!doctype html>
 <!--
     This illustrates the use of TData style data loading.
+	intermediate version, will be replaced
 -->
 <html>
 	<head>
@@ -97,10 +98,11 @@
                 addChart({
 					title:"xyz_scatter_plot",
 					type:"xyz_scatter_plot",
-					param:["height","weight","value", "foot"],
+					//param:["height","weight","value", "foot"],
+					param:["x","y","z", "cd3"],
                     data: tdata // later ? ndx could know
 				});
-                
+/**                
 				addChart({
 					title:"wgl_scatter_plot",
 					type:"wgl_scatter_plot",
@@ -140,7 +142,7 @@
 					param:"position",
 					cap:15
 				})
-	
+**/	
 				panel.style.height = '';
 			
 			}

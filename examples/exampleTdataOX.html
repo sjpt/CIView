@@ -1,6 +1,7 @@
 <!doctype html>
 <!--
     This illustrates the use of TData style data loading.
+    It uses the ?ox mechanism to choose input data.
 -->
 <html>
 	<head>
@@ -27,7 +28,7 @@
 		<h2 style= "display:inline-block;margin-bottom:4px"> Basic Setup </h2>
 		<a href="https://github.com/Hughes-Genome-Group/CIView/blob/master/examples/example1.html">View Source</a>
 		<div style="width:100%;margin-bottom:10px"> 
-            Showing FIFA data from kaggle
+            Showing <span id="showingtext">???</span>
 		</div>
 
 		<!-- The div to hold the panel -->
@@ -49,117 +50,161 @@
    	 	<script src="../src/ciview.js" type="module"></script>
 
 		<script type="module">
+            let ltime = Date.now();
+            const bmsg = (m) => {
+                const t = Date.now();
+                const mm = `${t - ltime} +++ ${m}`
+                showingtext.innerHTML = mm
+                console.log(mm);
+                ltime = t;
+            }
+            bmsg('importing')
+
             import {FilterPanel} from "../src/graphs.js";
             import {} from "../src/xyz_scatter_plot.js";
             import {} from "../src/density_scatter_plot.js";
 			let loc = 'http://localhost:8800/,,/xyz/';
 			// loc = '../..xyz/';
             import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
+            bmsg('imports done, loading real xyz')
             init(loc);
+            await awaitGGLoaded();
+            bmsg('xyz code load done')
 
-			let testyaml = "../examples/data/fromMLV.yaml";
-            testyaml = ',,/,,/,,/,,/BigPointData/cytof/cytof_1.5million_anonymised.txt.yaml'
-            testyaml = ',,/,,/,,/,,/BigPointData/fromMLV/fromMLV.yaml'
+			let testyaml = "../examples/data/fifa.yaml";    // football
+            const sd = GG.basic.getStartdata();
+            GG.basic.queryVariables.control = '';
+            if (sd) testyaml = sd;                          // yaml source may be overridden by ?ox convention
 
-			async function setUp(ydata){
-                await awaitGGLoaded();
+			// this setUp uses the yaml data to make a TData and uses that (via proxy) for the charts.
+            async function setUp(ydata) {
+                bmsg('yaml loaded and being processed')
+                let s = '????'
 
                 window.tdata = new GG.tdata.TData(ydata, testyaml);
-                window.data = tdata.makeProxy();
-                await tdata.lazyLoadCol('id');
+                const msg = (m) => bmsg(s + ' ' + tdata.n + ' ' + m);
 
-                // // for cytof
-			    // var columns=[
-				// 	{field:"X",name:"X",datatype:"double",filterable:true,sortable:true},
-				// 	{field:"Y",name:"Y",datatype:"double",filterable:true,sortable:true},
-				// 	{field:"Z",name:"Z",datatype:"double",filterable:true,sortable:true},
-				// 	{field:"cd3",name:"cd3",datatype:"double",filterable:true,sortable:true},
-				// 	{field:"cd4",name:"cd4",datatype:"double",filterable:true,sortable:true},
-				// 	{field:"cd8",name:"cd8",datatype:"double",filterable:true,sortable:true},
-				// ];
+                msg('start, makeProxy')
+                window.data = tdata.makeProxy(); // the proxy behaves like a json object, eg you can ask for data[i].field
+                msg('load id column')
+                await tdata.lazyLoadCol('id');      // the id column is needed by crossfilter. We will synthesize one if needed.
+                msg('id column loaded')
 
-    			var columns=[
-				    {field:"field10",name:"field10",datatype:"double",filterable:true,sortable:true},
-				    {field:"field11",name:"field11",datatype:"double",filterable:true,sortable:true},
-				    {field:"field12",name:"field12",datatype:"double",filterable:true,sortable:true},
-				    {field:"field13",name:"field13",datatype:"double",filterable:true,sortable:true}
-                ]
+    			// use the information in the tdata to make columns structure
+                var columns=tdata.header.map(h => 
+                    ({field:h, name:h, datatype: tdata.namecolnnum[h] > tdata.namecolnstrs[h] ? "double" : "string",filterable:true, sortable:true})
+                );
 
+                // initial fields for various test cases
+                var fields;
+                if (tdata.ranges.field17) { fields = ["field17", "field20", "field19", "field8"]; s = 'big fromMLV' }
+                else if (tdata.ranges.x) { fields = ["x", "y", "z", "cd3"]; s = 'cytof etc' }
+                else if (tdata.ranges.height) { fields = ["height","weight","value", "foot"]; s = 'FIFA data from kaggle (via TData)'; }
+                
 
-				window.fp = new FilterPanel("panel",data,{menu_bar:true,columns:columns});
+				window.fp = new FilterPanel("panel",data, {menu_bar:true, columns});
+
+                // Replace fp.addChart with a lazyload aware version.
+                // The various 'standard' (non-xyz) charts do not understand the incremental load of each column,
+                // so we need to make sure the neccessary column loads are complete before calling the original addChart.
+                fp.originalAddChart = fp.addChart;
 				async function addChart(x) {
                     // make sure all the data it needs will be ready
                     // in future, we could allow charts that accepted the incremental nature of lazyload
                     let p = x.param;
                     if (typeof p === 'string') p = [p];
+                    const k = 'data' + p.join(',');
+                    msg('await ' + k)
                     const pp = [];
                     for (const k of p) {
                         pp.push(tdata.lazyLoadCol(k));
                     }
                     await Promise.all(pp);
+                    msg(k + 'data loaded')
 
-					fp.addChart(x);
+					fp.originalAddChart(x);
+                    msg(k + 'chart done')
 				}
+                fp.addChart = addChart;
+
 
                 // note: as addChart is async these may get done in arbitrary order
                 // depending how quickly the different columns get lazy loaded.
                 // to enforce a required order, use 'await addChart'
-                addChart({
-					title:"xyz_scatter_plot",
-					type:"xyz_scatter_plot",
-					param:["field17", "field20", "field19", "field8"],
-                    data: tdata // later ? ndx could know
-				});
+                for (let i=0; i<1; i++) {
+                    msg('about to do xyz plot ~~~~~~~~~~~~~');
+                    const px = addChart({
+                        title:"xyz_scatter_plot",
+                        type:"xyz_scatter_plot",
+                        param:fields,
+                        data: tdata, // later ? ndx could know
+                        height: 800
+                    });
+                    msg('xyz addChart done');
+                    await px;
+                    msg('xyz addChart await done');
+                    await currentXyz.dataToMarkersGui();
+                    msg('xyz dataToMarkersGui done');
+                    msg('end xyz ~~~~~~~~~~~~');
+                    await GG.basic.sleep(1);
+                }
                 
-				addChart({
+                msg('start wgl ~~~~~~~~~~~~~~~~');
+				const pw = addChart({
 					title:"wgl_scatter_plot",
 					type:"wgl_scatter_plot",
-					param:["field17", "field20"],
+					param: fields,
+                    height: 800
 				});
-/**
-				addChart({
-					title:"density_scatter_plot",
-					type:"density_scatter_plot",
-					param:["height","weight"],
-				});
+                msg('call done');
+                await pw;
+                msg('await done');
+                msg('end qqwgl ~~~~~~~~~~~~~~~~~');
 
-		
-				addChart({
-					type:"bar_chart",
-					param:"overall",
-					title:"Overall Score"
-				});
+                if (s.startsWith('FIFA')) {
 
-				addChart({
-					type:"bar_chart",
-					param:"value",
-					title:"Value(M)",
-					display_max:20,
-					bin_number:20
-				});
+                    addChart({
+                        title:"density_scatter_plot",
+                        type:"density_scatter_plot",
+                        param:["height","weight"],
+                    });
+            
+                    addChart({
+                        type:"bar_chart",
+                        param:"overall",
+                        title:"Overall Score"
+                    });
+
+                    addChart({
+                        type:"bar_chart",
+                        param:"value",
+                        title:"Value(M)",
+                        display_max:20,
+                        bin_number:20
+                    });
 
 
-				addChart({
-					type:"box_plot",
-					param:["foot","overall"],
-					title:"Preferred Foot vs. Skill"
-				});
+                    addChart({
+                        type:"box_plot",
+                        param:["foot","overall"],
+                        title:"Preferred Foot vs. Skill"
+                    });
 
-				addChart({
-					type:"row_chart",
-					param:"position",
-					cap:15
-				})
-**/                
+                    addChart({
+                        type:"row_chart",
+                        param:"position",
+                        cap:15
+                    })
+                }  // FIFA only charts
+
 	
-				panel.style.height = '';
-			
-			}
+				// this allows the full window height to be used for the charts
+                panel.style.height = '';
+			}   // setUp
 
 			//load the data (take from https://www.kaggle.com/)
-            $.ajax({
-                url:testyaml
-            }).done(setUp);
+            bmsg('loading ' + testyaml);
+            fetch(testyaml).then(d=>d.text()).then(d=>setUp(d));
 		</script>
  	 </body>
 </html>
