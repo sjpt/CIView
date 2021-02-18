@@ -41,6 +41,12 @@
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.6.15/browser-polyfill.min.js"></script>
 		<!-- contains all the js and css necessary for the browser-->
 
+		<!-- non-module files needed by xyzviewer -->
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/three121.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/stats.min.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/js-yaml.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/math.js"></script>
+
 
         <!-- http://localhost:8800/,,/CIView-master/examples/example1S.html -->
    	 	<script src="../src/ciview.js" type="module"></script>
@@ -109,7 +115,7 @@
 					param:["foot","overall"],
 					title:"Preferred Foot vs. Skill"
 				});
-				
+
 				fp.addChart({
 					type:"row_chart",
 					param:"position",

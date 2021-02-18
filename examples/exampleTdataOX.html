@@ -21,6 +21,8 @@
          <link rel="stylesheet" type="text/css" href="../css/gridstack.css">
          <link rel="stylesheet" type="text/css" href="../css/ciview.css">
  
+         <link rel="stylesheet" type="text/css" href="../../xyz/xyz.css">
+ 
 	</head>
 
 
@@ -34,6 +36,13 @@
 		<!-- The div to hold the panel -->
 		
    	 	<div id="panel" style="height:500px;padding:10px" > </div>
+        <script>lastModified={}; lastModified.xyzhtml = `Last modified: 2021/02/18 20:11:43
+            `
+            var GG = {};
+            GG.starttime = Date.now();
+            colourpick = {value: 99};
+            </script>
+                                
    	 
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script> 
         <!-- <script src="../src/vendor/jquery.min.js"></script> -->
@@ -45,6 +54,17 @@
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.6.15/browser-polyfill.min.js"></script>
 		<!-- contains all the js and css necessary for the browser-->
 
+   		<!-- non-module files needed by xyzviewer -->
+		<script src="../../xyz/jsdeps/three121.js"></script>
+		<script src="../../xyz/jsdeps/stats.min.js"></script>
+		<script src="../../xyz/jsdeps/js-yaml.js"></script>
+		<script src="../../xyz/jsdeps/math.js"></script>
+
+		<!-- <script src="https://sjpt.github.io/xyz/main.js"></script> -->
+		<script src="../../xyz/main.js"></script>
+
+        <script src="../../xyz/xyzspeech.js" type="module"></script>
+        <script>console.log('xyzspeech read, window=', window)</script>
 
         <!-- http://localhost:8800/,,/CIView-master/examples/example1S.html -->
    	 	<script src="../src/ciview.js" type="module"></script>
@@ -63,12 +83,13 @@
             import {FilterPanel} from "../src/graphs.js";
             import {} from "../src/xyz_scatter_plot.js";
             import {} from "../src/density_scatter_plot.js";
-			let loc = 'http://localhost:8800/,,/xyz/';
+			//let loc = 'http://localhost:8800/,,/xyz/';
 			// loc = '../..xyz/';
-            import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
-            bmsg('imports done, loading real xyz')
-            init(loc);
-            await awaitGGLoaded();
+            //import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
+            //bmsg('imports done, loading real xyz')
+            //init(loc);
+            
+            // await awaitGGLoaded();
             bmsg('xyz code load done')
 
 			let testyaml = "../examples/data/fifa.yaml";    // football
@@ -111,18 +132,18 @@
 				async function addChart(x) {
                     // make sure all the data it needs will be ready
                     // in future, we could allow charts that accepted the incremental nature of lazyload
-                    let p = x.param;
+                    let p = x.param;                        // collect the required columns
                     if (typeof p === 'string') p = [p];
                     const k = 'data' + p.join(',');
                     msg('await ' + k)
                     const pp = [];
                     for (const k of p) {
-                        pp.push(tdata.lazyLoadCol(k));
+                        pp.push(tdata.lazyLoadCol(k));      // lazy load them (in parallel)
                     }
-                    await Promise.all(pp);
+                    await Promise.all(pp);                  // wait till they are all loaded
                     msg(k + 'data loaded')
 
-					fp.originalAddChart(x);
+					fp.originalAddChart(x);                 // now we can make the chart
                     msg(k + 'chart done')
 				}
                 fp.addChart = addChart;
@@ -131,6 +152,7 @@
                 // note: as addChart is async these may get done in arbitrary order
                 // depending how quickly the different columns get lazy loaded.
                 // to enforce a required order, use 'await addChart'
+                // several unecesary awaits below to pin down timing
                 for (let i=0; i<1; i++) {
                     msg('about to do xyz plot ~~~~~~~~~~~~~');
                     const px = addChart({
@@ -161,6 +183,7 @@
                 msg('await done');
                 msg('end qqwgl ~~~~~~~~~~~~~~~~~');
 
+                // for completeness use all the charts from the FIFA example
                 if (s.startsWith('FIFA')) {
 
                     addChart({
