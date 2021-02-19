@@ -93,7 +93,8 @@
             bmsg('xyz code load done')
 
 			let testyaml = "../examples/data/fifa.yaml";    // football
-            const sd = GG.basic.getStartdata();
+            let sd = GG.basic.getStartdata();
+            if (sd.startsWith('../xyzdata')) sd = '../' + sd;    // this is lower in the heirachy than the xyzview tests
             GG.basic.queryVariables.control = '';
             if (sd) testyaml = sd;                          // yaml source may be overridden by ?ox convention
 
