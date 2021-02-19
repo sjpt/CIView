@@ -3,6 +3,10 @@ import {MLVChart,WGLScatterPlot,FilterPanel,MLVColorLegend, WGLChart} from "./gr
 // import {d3} from "./vendor/d3.js";
 // import {WGL2DI} from "./webgl/wgl2di.js";
 
+import {useXShader} from '../../xyz/xshader.js'
+import {useLassoShader} from '../../xyz/lassoshader.js'
+import {XYZ} from '../../xyz/xyz.js'
+
 class XyzScatterPlot extends WGLScatterPlot {
 
     createApp(){
@@ -34,11 +38,11 @@ class XyzScatterPlot extends WGLScatterPlot {
 
         const GG = window.GG;           // this gives access to various parts of xysviewer, to do by import later
         const plotobj = this.div[0];    // find our parent
-        GG.plotobj = plotobj;
+        GG.plotobj = plotobj;           // help debug
 
         // create a XYZ object and populate it with the captured data
         /* @type {XYZ} */ 
-        let xyzobj = this.xyzobj = new GG.xyz.XYZ(this.config.data, 'fromMLV', true); 
+        let xyzobj = this.xyzobj = new XYZ(this.config.data, 'fromMLV', true); 
         if (!this.config.data) xyzobj.useJson(this.ndx.getOriginalData());
 
         // find the captured div, 
@@ -58,6 +62,9 @@ class XyzScatterPlot extends WGLScatterPlot {
         xyzobj.setField('Z', cols[2], false);
         xyzobj.setField('COL', cols[3], false);
         // xyzobj.setColor(this.config.color_by.column.id, false);
+
+        // useXShader(true, undefined, xyzobj); // needs a slow version first, to fix TODO
+        useLassoShader(true, undefined, xyzobj); // needs a slow version first, to fix TODO
     
         xyzobj.setBackground(1, 0.9, 0.9);
 
