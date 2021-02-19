@@ -40,6 +40,11 @@ class XyzScatterPlot extends WGLScatterPlot {
         const plotobj = this.div[0];    // find our parent
         GG.plotobj = plotobj;           // help debug
 
+        window.lassoshaderbox.checked = false;   // later have cleaner way to stop xyz using full dataToMarkers
+        window.xshaderbox.checked = false;   // later have cleaner way to stop xyz using full dataToMarkers
+        // XYZ.baseguiset.filterbox = window.filterbox.value = '//fast'  // still not working, make part of new XYZ ?
+
+
         // create a XYZ object and populate it with the captured data
         /* @type {XYZ} */ 
         let xyzobj = this.xyzobj = new XYZ(this.config.data, 'fromMLV', true); 
@@ -63,10 +68,11 @@ class XyzScatterPlot extends WGLScatterPlot {
         xyzobj.setField('COL', cols[3], false);
         // xyzobj.setColor(this.config.color_by.column.id, false);
 
-        // useXShader(true, undefined, xyzobj); // needs a slow version first, to fix TODO
-        useLassoShader(true, undefined, xyzobj); // needs a slow version first, to fix TODO
+        // for now, done above by setting flags before the new XYZ
+        // useXShader(true, undefined, xyzobj);
+        // useLassoShader(true, undefined, xyzobj);    // use shader version for faster load
     
-        xyzobj.setBackground(1, 0.9, 0.9);
+        xyzobj.setBackground(0.1);
 
         xyzobj.setPointSize(0.01)
 
