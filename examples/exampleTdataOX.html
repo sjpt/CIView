@@ -132,19 +132,21 @@
                 fp.originalAddChart = fp.addChart;
 				async function addChart(x) {
                     // make sure all the data it needs will be ready
-                    // in future, we could allow charts that accepted the incremental nature of lazyload
+                    // allow for charts that accept the incremental nature of lazyload (currently just xyz)
                     let p = x.param;                        // collect the required columns
                     if (typeof p === 'string') p = [p];
                     const k = 'data' + p.join(',');
                     msg('await ' + k)
-                    const pp = [];
-                    for (const k of p) {
-                        pp.push(tdata.lazyLoadCol(k));      // lazy load them (in parallel)
+                    if (x.type !== "xyz_scatter_plot") {        // load in advance except for incremental load aware xyz
+                        const pp = [];
+                        for (const k of p) {
+                            pp.push(tdata.lazyLoadCol(k));      // lazy load them (in parallel)
+                        }
+                        await Promise.all(pp);                  // wait till they are all loaded
+                        msg(k + 'data loaded')
                     }
-                    await Promise.all(pp);                  // wait till they are all loaded
-                    msg(k + 'data loaded')
 
-					fp.originalAddChart(x);                 // now we can make the chart
+					fp.originalAddChart(x);                     // now we can make the chart
                     msg(k + 'chart done')
 				}
                 fp.addChart = addChart;
@@ -156,7 +158,7 @@
                 // several unecesary awaits below to pin down timing
                 for (let i=0; i<1; i++) {
                     msg('about to do xyz plot ~~~~~~~~~~~~~');
-                    const px = addChart({
+                    const px = fp.addChart({
                         title:"xyz_scatter_plot",
                         type:"xyz_scatter_plot",
                         param:fields,
@@ -173,7 +175,7 @@
                 }
                 
                 msg('start wgl ~~~~~~~~~~~~~~~~');
-				const pw = addChart({
+				const pw = fp.addChart({
 					title:"wgl_scatter_plot",
 					type:"wgl_scatter_plot",
 					param: fields,

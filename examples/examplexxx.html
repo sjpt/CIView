@@ -1,0 +1,65 @@
+<!-- for hack experiments, do not use seriously -->
+<!doctype html>
+<html>
+	<head>
+		<style>
+		    .civ-icon{
+		    	font-size:18px;
+		    	cursor:pointer;
+		    	margin:1px 4px;
+		    }
+		</style>
+  		<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+          <link rel="stylesheet" type="text/css" href="../css/jquery-ui-bootstrap/jquery-ui-1.10.3.custom.css">
+         <link rel="stylesheet" type="text/css" href="../css/slickgrid/slick.grid.css">
+         <link rel="stylesheet" type="text/css" href="../css/slickgrid/slick.default.theme.css">
+         <link rel="stylesheet" type="text/css" href="../css/fa-5.5.0/all.css">
+         <link rel="stylesheet" type="text/css" href="../css/dc.min.css">
+         <link rel="stylesheet" type="text/css" href="../css/gridstack.css">
+         <link rel="stylesheet" type="text/css" href="../css/ciview.css">
+
+		 <link rel="stylesheet" type="text/css" href="../../xyz/xyz.css">
+ 
+	</head>
+
+
+ 	<body>
+		<h2 style= "display:inline-block;margin-bottom:4px"> Basic Setup </h2>
+		<a href="https://github.com/Hughes-Genome-Group/CIView/blob/master/examples/example1.html">View Source</a>
+		<div style="width:100%;margin-bottom:10px"> 
+            Showing FIFA data from kaggle
+		</div>
+
+		<!-- The div to hold the panel -->
+		
+   	 	<div id="panel" style="height:500px;padding:10px" > </div>
+   	 
+		<script>lastModified={}; lastModified.xyzhtml = `Last modified: 2021/02/18 20:11:43
+			`
+			var GG = {};
+			GG.starttime = Date.now();
+			colourpick = {value: 99};
+		</script>
+	
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script> 
+        <!-- <script src="../src/vendor/jquery.min.js"></script> -->
+		<script src="../src/vendor/jquery-ui.min.js"></script>
+		<script src="../src/vendor/jquery-ui-fixes.js"></script>
+
+		
+		<!-- only necessary for browsers which do not support es6-->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.6.15/browser-polyfill.min.js"></script>
+		<!-- contains all the js and css necessary for the browser-->
+
+		<script src="../dist/ciview.js" type="module"></script>
+
+
+		<!-- non-module files needed by xyzviewer -->
+		<!-- <script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/three121.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/stats.min.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/js-yaml.js"></script>
+		<script src="https://github.com/sjpt/sjpt.github.io/blob/master/xyz/jsdeps/math.js"></script> -->
+
+		</script>
+ 	 </body>
+</html>
