@@ -70,13 +70,16 @@
    	 	<script src="../src/ciview.js" type="module"></script>
 
 		<script type="module">
+            function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }  // permit await sleep(xxx)
+
             let ltime = Date.now();
-            const bmsg = (m) => {
+            const bmsg = async (m) => {
                 const t = Date.now();
                 const mm = `${t - ltime} +++ ${m}`
-                showingtext.innerHTML = mm
+                msgbox.innerHTML = mm
                 console.log(mm);
                 ltime = t;
+                await sleep(0); // so message appears (if we awaait)
             }
             bmsg('importing')
 
@@ -103,14 +106,16 @@
                 bmsg('yaml loaded and being processed')
                 let s = '????'
 
-                window.tdata = new GG.tdata.TData(ydata, testyaml);
-                const msg = (m) => bmsg(s + ' ' + tdata.n + ' ' + m);
+                window.tdata = new GG.tdata.TData(ydata, testyaml); // window.tdata to help debug
+                // window.tdata = GG.tdata.TData.get(ydata, 'fromMLV'); // window.tdata to help debug
+                GG.tdata.TData.tdatas.fromMLV = window.tdata;
+                const msg = async (m) => await bmsg(s + ' ' + tdata.n + ': ' + m);
 
-                msg('start, makeProxy')
+                await msg('start, make TData Proxy'); 
                 window.data = tdata.makeProxy(); // the proxy behaves like a json object, eg you can ask for data[i].field
-                msg('load id column')
+                await msg('load id column')
                 await tdata.lazyLoadCol('id');      // the id column is needed by crossfilter. We will synthesize one if needed.
-                msg('id column loaded')
+                await msg('id column loaded')
 
     			// use the information in the tdata to make columns structure
                 var columns=tdata.header.map(h => 
@@ -126,9 +131,13 @@
 
 				window.fp = new FilterPanel("panel",data, {menu_bar:true, columns});
 
-                // Replace fp.addChart with a lazyload aware version.
+                // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ TData patch 
+                // Replace fp.addChart with a TData/lazyload aware version.
+                //
                 // The various 'standard' (non-xyz) charts do not understand the incremental load of each column,
                 // so we need to make sure the neccessary column loads are complete before calling the original addChart.
+                //
+                // In a production system these would a part of standard fp.addChart
                 fp.originalAddChart = fp.addChart;
 				async function addChart(x) {
                     // make sure all the data it needs will be ready
@@ -136,55 +145,57 @@
                     let p = x.param;                        // collect the required columns
                     if (typeof p === 'string') p = [p];
                     const k = 'data' + p.join(',');
-                    msg('await ' + k)
+                    await msg('await preload of columns ' + k)
                     if (x.type !== "xyz_scatter_plot") {        // load in advance except for incremental load aware xyz
                         const pp = [];
                         for (const k of p) {
                             pp.push(tdata.lazyLoadCol(k));      // lazy load them (in parallel)
                         }
                         await Promise.all(pp);                  // wait till they are all loaded
-                        msg(k + 'data loaded')
+                        await msg(k + ' columns loaded for ' + x.type + ' making chart ...');
                     }
 
 					fp.originalAddChart(x);                     // now we can make the chart
-                    msg(k + 'chart done')
+                    await msg(k + 'add chart done ' + x.type)
 				}
                 fp.addChart = addChart;
+                // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END TData patch 
 
 
                 // note: as addChart is async these may get done in arbitrary order
                 // depending how quickly the different columns get lazy loaded.
                 // to enforce a required order, use 'await addChart'
-                // several unecesary awaits below to pin down timing
+                // several unecesary awaits below to pin down timing tests
                 for (let i=0; i<1; i++) {
-                    msg('about to do xyz plot ~~~~~~~~~~~~~');
+                    await msg('about to do xyz plot ~~~~~~~~~~~~~');
                     const px = fp.addChart({
                         title:"xyz_scatter_plot",
                         type:"xyz_scatter_plot",
                         param:fields,
-                        data: tdata, // later ? ndx could know
+                        // data: tdata, // later ? ndx could know
                         height: 800
                     });
-                    msg('xyz addChart done');
-                    await px;
-                    msg('xyz addChart await done');
-                    await currentXyz.dataToMarkersGui();
-                    msg('xyz dataToMarkersGui done');
-                    msg('end xyz ~~~~~~~~~~~~');
-                    await GG.basic.sleep(1);
+                    await msg('xyz addChart done');
+                    // await px;
+                    // msg('xyz addChart await done');
+                    // await currentXyz.dataToMarkersGui();
+                    // msg('xyz dataToMarkersGui done');
+                    // msg('end xyz ~~~~~~~~~~~~');
+                    // await GG.basic.sleep(1);
                 }
                 
-                msg('start wgl ~~~~~~~~~~~~~~~~');
+                await msg('start wgl addChart ~~~~~~~~~~~~~~~~');
 				const pw = fp.addChart({
 					title:"wgl_scatter_plot",
 					type:"wgl_scatter_plot",
 					param: fields,
                     height: 800
 				});
-                msg('call done');
+                await msg('wgl addchart call done');
                 await pw;
-                msg('await done');
-                msg('end qqwgl ~~~~~~~~~~~~~~~~~');
+                await msg('await done');
+                await msg('end qqwgl ~~~~~~~~~~~~~~~~~');
+                await msg('charts all done ~~~~~~~~~~~~~~~~~');
 
                 // for completeness use all the charts from the FIFA example
                 if (s.startsWith('FIFA')) {

@@ -8,6 +8,8 @@ import {useLassoShader} from '../../xyz/lassoshader.js'
 import {XYZ} from '../../xyz/xyz.js'
 
 class XyzScatterPlot extends WGLScatterPlot {
+    // none of the work done in WGLScatterPlot.init() is useful to us, and minmax part is expensive
+    init() { this.type="xyz_scatter_plot"; }   
 
     createApp(){
         // config here ?
@@ -16,7 +18,11 @@ class XyzScatterPlot extends WGLScatterPlot {
         const xyz = this.makexyz();
 
         // Martin to make this.app and addItems() more offical ... this was just to get it going
-        this.app = {addHandler: ()=>{}, setSize: (w,h) => xyz.setSize(w,h)};
+        this.app = {
+            addHandler: ()=>{}, 
+            setSize: (w,h) => xyz.setSize(w,h),
+            remove: () => {}    // todo
+        };
     }
 
     addItems() { this.type="xyz_scatter_plot" };
@@ -46,9 +52,15 @@ class XyzScatterPlot extends WGLScatterPlot {
 
 
         // create a XYZ object and populate it with the captured data
+        let data = this.config.data;
+        if (!data) data = this.ndx.getOriginalData();
+        // if (!isNaN(data[0].___) data = 
         /* @type {XYZ} */ 
-        let xyzobj = this.xyzobj = new XYZ(this.config.data, 'fromMLV', true); 
-        if (!this.config.data) xyzobj.useJson(this.ndx.getOriginalData());
+        let xyzobj = this.xyzobj = new XYZ(data, 'fromMLV', true); 
+        // if (!this.config.data) {
+        //     const data = 
+        //     xyzobj.useJson(this.ndx.getOriginalData());
+        // }
 
         // find the captured div, 
         // hide pre-made children (Martin to tidy?)

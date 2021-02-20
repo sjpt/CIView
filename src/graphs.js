@@ -4049,15 +4049,16 @@ function findMinMax(data,field){
 
    
     for (let item of data){
-    	if (isNaN(item[field])){
+        const f = item[field];
+    	if (isNaN(f)){
     		continue;
     	}
    
-        if (item[field]>max){
-            max=item[field];
+        if (f>max){
+            max=f;
         }
-        if (item[field]<min){
-            min=item[field]
+        if (f<min){
+            min=f
         }
         
 
