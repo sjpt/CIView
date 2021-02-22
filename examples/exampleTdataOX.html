@@ -79,7 +79,8 @@
                 msgbox.innerHTML = mm
                 console.log(mm);
                 ltime = t;
-                await sleep(0); // so message appears (if we awaait)
+                await sleep(0); // so message appears (if we await)
+                await sleep(0); // so message appears (if we await). not sure why we need two calls?
             }
             bmsg('importing')
 
@@ -88,7 +89,7 @@
             import {} from "../src/density_scatter_plot.js";
 			//let loc = 'http://localhost:8800/,,/xyz/';
 			// loc = '../..xyz/';
-            //import {init, awaitGGLoaded} from '../../xyz/patchxyz.js';
+            //import {init, awaitGGLoaded} from '../../xyz/patch xyz.js';
             //bmsg('imports done, loading real xyz')
             //init(loc);
             
@@ -119,7 +120,7 @@
 
     			// use the information in the tdata to make columns structure
                 var columns=tdata.header.map(h => 
-                    ({field:h, name:h, datatype: tdata.namecolnnum[h] > tdata.namecolnstrs[h] ? "double" : "string",filterable:true, sortable:true})
+                    ({field:h, name:h, datatype: tdata.ranges[h].numNum > tdata.ranges[h].numStrs ? "double" : "string",filterable:true, sortable:true})
                 );
 
                 // initial fields for various test cases
@@ -142,6 +143,8 @@
 				async function addChart(x) {
                     // make sure all the data it needs will be ready
                     // allow for charts that accept the incremental nature of lazyload (currently just xyz)
+                    //???? for some reason this locks Chrome ???? console.profile('chart' + x.type);
+                    console.time('chart+++' + x.type)
                     let p = x.param;                        // collect the required columns
                     if (typeof p === 'string') p = [p];
                     const k = 'data' + p.join(',');
@@ -153,10 +156,15 @@
                         }
                         await Promise.all(pp);                  // wait till they are all loaded
                         await msg(k + ' columns loaded for ' + x.type + ' making chart ...');
+                        //await msg(k + ' columns loaded for ' + x.type + ' making chart ... 2');
+                        //await msg(k + ' columns loaded for ' + x.type + ' making chart ... 3');
                     }
 
 					fp.originalAddChart(x);                     // now we can make the chart
                     await msg(k + 'add chart done ' + x.type)
+                    // ???? console.profileEnd('chart' + x.type);
+                    console.timeEnd('chart+++' + x.type)
+
 				}
                 fp.addChart = addChart;
                 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END TData patch 

@@ -4044,12 +4044,15 @@ MLVChart.chart_types={
 
 
 function findMinMax(data,field){
+    // change sjpt to make TData aware
+    const tdata = (data[0]._tdata);
+    if (tdata) return [tdata.ranges[field].min, tdata.ranges[field].max]
+
     let max = Number.MIN_SAFE_INTEGER;
     let min = Number.MAX_SAFE_INTEGER;
-
    
     for (let item of data){
-        const f = item[field];
+        const f = item[field];  // change by sjpt to remove multiple item[field] lookups
     	if (isNaN(f)){
     		continue;
     	}
