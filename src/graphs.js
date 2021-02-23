@@ -4045,26 +4045,39 @@ MLVChart.chart_types={
 
 function findMinMax(data,field){
     // change sjpt to make TData aware
+    // **1** illustrates use of precomputed data min/max values.
+    // **2** illustrates use of specific TData aware code for field access
+    // comment out **1** to test **2**
     const tdata = (data[0]._tdata);
-    if (tdata) return [tdata.ranges[field].min, tdata.ranges[field].max]
+    // if (tdata) return [tdata.ranges[field].min, tdata.ranges[field].max]; // **1**
 
     let max = Number.MIN_SAFE_INTEGER;
     let min = Number.MAX_SAFE_INTEGER;
-   
-    for (let item of data){
-        const f = item[field];  // change by sjpt to remove multiple item[field] lookups
-    	if (isNaN(f)){
-    		continue;
-    	}
-   
-        if (f>max){
-            max=f;
-        }
-        if (f<min){
-            min=f
-        }
-        
 
+    // **2** exmple of using tdata direct access (rather than via proxy) sjpt
+    // Usually switch would be at the assignment to f level for minimal change to the app.
+    if (tdata) {
+        const col = tdata.fvals[field];
+        for (let i = 0; i < tdata.n; i++) {
+            const f = col[i];
+            if (isNaN(f)) continue;
+            if (f>max) max=f;
+            if (f<min) min=f
+        }
+    } else {  
+        for (let item of data){
+            const f = item[field];  // change by sjpt to remove multiple item[field] lookups
+            if (isNaN(f)){
+                continue;
+            }
+    
+            if (f>max){
+                max=f;
+            }
+            if (f<min){
+                min=f
+            }
+        }
     }
     return [min,max];
 }
