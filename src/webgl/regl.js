@@ -1345,6 +1345,9 @@ function flattenRec (array, shape, level, out, ptr) {
 }
 
 function flattenArray (array, shape, type, out_) {
+  // sjpt, we may have generated flattened arrays in the first place,
+  // in which case nothing else needs to be done here.
+  if (array instanceof Float32Array) return array;
   var sz = 1;
   if (shape.length) {
     for (var i = 0; i < shape.length; ++i) {

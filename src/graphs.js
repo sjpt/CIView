@@ -2311,7 +2311,7 @@ class WGLScatterPlot extends WGLChart{
     }
 
 
-    addItems(){
+    addItemsO(){
     	this.type="wgl_scatter_plot";
     	let data = this.ndx.getOriginalData();   
     	for (let item of data){
@@ -2331,6 +2331,55 @@ class WGLScatterPlot extends WGLChart{
 		this.app.setUniversalCircleRadius(this.config.radius);
 		this.afterInit();
     }
+
+    addItems(){ 
+        // This version creates pre-allocated Float32Arrays and then populates them, 
+        // It also assumes TData format ... 
+        // Those two aspects are orthogonal, either could be used independently from the other.
+    	this.type="wgl_scatter_plot";
+    	let data = this.ndx.getOriginalData();
+        const n = data.length;
+        const app = this.app;
+        const opacity = 1;
+
+        const pos = app.circles.position = new Float32Array(2*n);
+        app.circles.radius = new Float32Array(n).fill(this.config.radius);
+        app.circles.opacity = new Float32Array(n).fill(opacity);
+        const col = app.circles.color = new Float32Array(3*n).fill(0.5);
+        app.circles.start_angle = new Float32Array(n); app.circles.start_angle.fill(10);
+        app.circles.end_angle = new Float32Array(n); app.circles.end_angle.fill(0);
+
+        // we don't bother to fill with default_color here as it gets done in setParameters later
+        // const dc = this.default_color, dc0 = dc[0], dc1 = dc[1], dc2 = dc[2];
+        const objs = app.objects = new Array(n);
+        const keys = app.keys;
+
+        // tdata optimization, get the columns that will be used as local variables
+        const tdata = data[0]._tdata;
+        const colx = tdata.fvals[this.x];
+        const coly = tdata.fvals[this.y];
+        const colid = tdata.fvals.id;
+
+        for (let i=0; i<n; i++) {
+            // this.app.addCircle([x,-y],this.config.radius,this.default_color,item.id);
+            // const item = data[i];
+    		let x=colx[i]; // item[this.x];
+    		let y=coly[i]; // item[this.y];
+    		if (x==null || isNaN(x)|| y==null || isNaN(y))
+    			continue;
+            keys[colid[i]] = i;
+            pos[2*i] = x;
+            pos[2*i + 1] = -y;
+            // col[3*i] = dc0;
+            // col[3*i+1] = dc1;
+            // col[3*i+2] = dc2;
+            objs[i] = [i, 0, i+1];
+        }
+        app.circles.count = n;
+		app.setUniversalCircleRadius(this.config.radius);
+		this.afterInit();
+    }
+
 
     changeFields(fields){
         this.x= fields[0];
@@ -4049,7 +4098,7 @@ function findMinMax(data,field){
     // **2** illustrates use of specific TData aware code for field access
     // comment out **1** to test **2**
     const tdata = (data[0]._tdata);
-    // if (tdata) return [tdata.ranges[field].min, tdata.ranges[field].max]; // **1**
+    if (tdata) return [tdata.ranges[field].min, tdata.ranges[field].max]; // **1**
 
     let max = Number.MIN_SAFE_INTEGER;
     let min = Number.MAX_SAFE_INTEGER;

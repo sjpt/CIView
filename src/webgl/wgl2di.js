@@ -567,10 +567,19 @@ class WGL2DI{
 			return;
 		}
 		var obj_type= this.object_types[obj[1]];
+		const c = obj_type.data.color;	// sjpt
+		if (c instanceof Float32Array) { // for pre-created FloatArray color attribute. does not allow for vertices !== 1
+			const x=obj[0];
+			c[x*3] = color[0]/255;
+			c[x*3+1] = color[1]/255;
+			c[x*3+2] = color[2]/255;
+
+			return;
+		}
 		for (var x=obj[0];x<obj[0]+obj_type.vertices;x++){
-			obj_type.data.color[x][0]=color[0]/255;
-			obj_type.data.color[x][1]=color[1]/255;
-			obj_type.data.color[x][2]=color[2]/255;
+			c[x][0]=color[0]/255;
+			c[x][1]=color[1]/255;
+			c[x][2]=color[2]/255;
 		}
 	}
 
